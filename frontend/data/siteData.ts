@@ -79,133 +79,27 @@ export const navItems: NavItem[] = [
   { id: "supreme", label: "Supreme Council Site" },
 ];
 
-const officerTitles = [
-  "Grand Knight",
-  "Deputy Grand Knight",
-  "Chancellor",
-  "Advocate",
-  "Recorder",
-  "Treasurer",
-  "Warden",
-  "Inside Guard",
-  "Outside Guard",
-  "Trustee - 1 Year",
-  "Trustee - 2 Year",
-  "Trustee - 3 Year",
-  "Financial Secretary",
-  "Lecturer",
-] as const;
-
-export const officers: Officer[] = Array.from({ length: 14 }, (_, index) => {
-  const title = officerTitles[index];
-  if (index === 0) {
-    return {
-      name: "SK John H Akers",
-      title,
-      imageUrl: "/officers/john-h-akers.png",
-    };
-  }
-  if (index === 1) {
-    return {
-      name: "SK James Huckestein",
-      title,
-      imageUrl: "/officers/james-h.png",
-    };
-  }
-  if (index === 2) {
-    return {
-      name: "SK Dennis M Riley",
-      title,
-      imageUrl: "/officers/Riley.png",
-    };
-  }
-  if (index === 3) {
-    return {
-      name: "SK Mark Radcliffe",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 4) {
-    return {
-      name: "SK John Grahek",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 5) {
-    return {
-      name: "SK John A. Manning",
-      title,
-      imageUrl: "/officers/Manning.png",
-    };
-  }
-  if (index === 6) {
-    return {
-      name: "Michael W. Schindler",
-      title,
-      imageUrl: "/officers/Schindler.png",
-    };
-  }
-  if (index === 7) {
-    return {
-      name: "Michael D. Gunnels",
-      title,
-      imageUrl: "/officers/Gunnels.png",
-    };
-  }
-  if (index === 8) {
-    return {
-      name: "Michael D. Placeholder",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 9) {
-    return {
-      name: "Aaron Sheets",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 10) {
-    return {
-      name: "SK Gary Walton",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 11) {
-    return {
-      name: "SK Frank A. Ventura",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 12) {
-    return {
-      name: "Rob Steele",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 13) {
-    return {
-      name: "Jan Wojciechowski",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-});
+export const officers: Officer[] = [
+  { name: "SK John H Akers",       title: "Grand Knight",       imageUrl: "/officers/john-h-akers.png" },
+  { name: "SK James Huckestein",   title: "Deputy Grand Knight", imageUrl: "/officers/james-h.png" },
+  { name: "SK Dennis M Riley",     title: "Chancellor",          imageUrl: "/officers/Riley.png" },
+  { name: "SK Mark Radcliffe",     title: "Advocate",            imageUrl: "/officers/Ventura.png" },
+  { name: "SK John Grahek",        title: "Recorder",            imageUrl: "/officers/Ventura.png" },
+  { name: "SK John A. Manning",    title: "Treasurer",           imageUrl: "/officers/Manning.png" },
+  { name: "Michael W. Schindler",  title: "Warden",              imageUrl: "/officers/Schindler.png" },
+  { name: "Michael D. Gunnels",    title: "Inside Guard",        imageUrl: "/officers/Gunnels.png" },
+  { name: "Michael D. Placeholder",title: "Outside Guard",       imageUrl: "/officers/Ventura.png" },
+  { name: "Aaron Sheets",          title: "Trustee - 1 Year",    imageUrl: "/officers/Ventura.png" },
+  { name: "SK Gary Walton",        title: "Trustee - 2 Year",    imageUrl: "/officers/Ventura.png" },
+  { name: "SK Frank A. Ventura",   title: "Trustee - 3 Year",    imageUrl: "/officers/Ventura.png" },
+  { name: "Rob Steele",            title: "Financial Secretary", imageUrl: "/officers/Ventura.png" },
+  { name: "Jan Wojciechowski",     title: "Lecturer",            imageUrl: "/officers/Ventura.png" },
+];
 
 export const sectionContent: Record<
-  Exclude<SectionId, "home" | "officers" | "members">,
+  Exclude<SectionId, "home" | "officers" | "members" | "about">,
   { title: string; body: string; links?: { label: string; href: string }[] }
 > = {
-  about: {
-    title: "About Our Council",
-    body: "Council 830 serves parish families through faith formation, charity drives, and community fellowship throughout the year.",
-  },
   prayer: {
     title: "Prayer Requests",
     body: "Please keep our parish families, clergy, and first responders in your prayers. Contact the council office to submit intentions.",

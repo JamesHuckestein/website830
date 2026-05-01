@@ -39,6 +39,8 @@ export function MembersLoginForm({ onLogin }: MembersLoginFormProps) {
         <label className="block text-sm font-medium text-[#032147]">
           Membership Number
           <input
+            name="username"
+            autoComplete="username"
             value={membershipNumber}
             onChange={(event) => setMembershipNumber(event.target.value)}
             className="mt-1 w-full rounded-md border border-[#D3D3D3] px-3 py-2"
@@ -48,6 +50,8 @@ export function MembersLoginForm({ onLogin }: MembersLoginFormProps) {
           Passcode
           <input
             type="password"
+            name="current-password"
+            autoComplete="current-password"
             value={passcode}
             onChange={(event) => setPasscode(event.target.value)}
             className="mt-1 w-full rounded-md border border-[#D3D3D3] px-3 py-2"

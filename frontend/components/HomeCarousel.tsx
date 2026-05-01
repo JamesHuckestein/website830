@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 
 import type { Officer } from "@/data/siteData";
@@ -22,7 +22,7 @@ export function HomeCarousel({ officers, onOpenOfficers }: HomeCarouselProps) {
     return () => clearInterval(timer);
   }, [total]);
 
-  const officer = useMemo(() => officers[currentIndex], [officers, currentIndex]);
+  const officer = officers[currentIndex];
 
   const movePrevious = () => {
     setCurrentIndex((prev) => (prev - 1 + total) % total);

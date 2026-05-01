@@ -14,3 +14,10 @@ frontend/test-results/
 .env
 .env.*
 !.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/

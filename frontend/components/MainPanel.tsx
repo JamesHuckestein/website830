@@ -95,11 +95,10 @@ export function MainPanel({
   }
 
   if (activeSection === "about") {
-    const content = sectionContent.about;
     return (
       <section className="space-y-6">
-        <h2 className="text-2xl font-semibold text-[#032147]">{content.title}</h2>
-        <p className="text-[#888888]">{content.body}</p>
+        <h2 className="text-2xl font-semibold text-[#032147]">About Our Council</h2>
+        <p className="text-[#888888]">Council 830 serves parish families through faith formation, charity drives, and community fellowship throughout the year.</p>
         <div className="grid gap-8 md:grid-cols-2 md:gap-10">
           <div className="space-y-6">
             <div className="space-y-2">
