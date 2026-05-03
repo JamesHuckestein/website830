@@ -1,28 +1,51 @@
 import Image from "next/image";
 
+import { BirthdayList } from "@/components/BirthdayList";
+import { ContactInfoForm } from "@/components/ContactInfoForm";
 import { HomeCarousel } from "@/components/HomeCarousel";
+import { MeetingMinutes } from "@/components/MeetingMinutes";
+import { MemberList } from "@/components/MemberList";
+import { MembersArea } from "@/components/MembersArea";
 import { MembersLoginForm } from "@/components/MembersLoginForm";
+import { NominationForm } from "@/components/NominationForm";
+import { OfficerContacts } from "@/components/OfficerContacts";
+import { PrayerRequests } from "@/components/PrayerRequests";
 import {
   aboutCouncilDetails,
   officers,
   sectionContent,
+  type MemberSubSection,
   type SectionId,
 } from "@/data/siteData";
 
 type MainPanelProps = {
   activeSection: SectionId;
   isLoggedIn: boolean;
+  isOfficer: boolean;
+  memberSubSection: MemberSubSection | null;
+  meetingMinutesDetail: string | null;
   onLogin: (membershipNumber: string, passcode: string) => boolean;
   onLogout: () => void;
   onNavigateToSection: (section: SectionId) => void;
+  onSelectMemberSubSection: (sub: MemberSubSection) => void;
+  onSelectMeetingMinute: (id: string) => void;
+  onBackToMeetingMinutes: () => void;
+  onBackToMembersArea: () => void;
 };
 
 export function MainPanel({
   activeSection,
   isLoggedIn,
+  isOfficer,
+  memberSubSection,
+  meetingMinutesDetail,
   onLogin,
   onLogout,
   onNavigateToSection,
+  onSelectMemberSubSection,
+  onSelectMeetingMinute,
+  onBackToMeetingMinutes,
+  onBackToMembersArea,
 }: MainPanelProps) {
   if (activeSection === "home") {
     return (
@@ -67,31 +90,46 @@ export function MainPanel({
   }
 
   if (activeSection === "members") {
-    if (isLoggedIn) {
+    if (!isLoggedIn) {
+      return <MembersLoginForm onLogin={onLogin} />;
+    }
+
+    if (memberSubSection === "contactInfo") {
+      return <ContactInfoForm memberNumber="8301001" onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "birthdays") {
+      return <BirthdayList onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "prayerRequests") {
+      return <PrayerRequests onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "memberList") {
+      return <MemberList isOfficer={isOfficer} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "officers") {
+      return <OfficerContacts onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "nomination") {
+      return <NominationForm onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "meetingMinutes") {
       return (
-        <section className="space-y-4">
-          <h2 className="text-2xl font-semibold text-[#032147]">Members Area</h2>
-          <p className="text-[#888888]">
-            Welcome to the members-only section. Here you can review private
-            council updates and volunteer schedules.
-          </p>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-[#032147]">
-            <li>Monthly council meeting agenda</li>
-            <li>Committee sign-up opportunities</li>
-            <li>Internal volunteer contact list</li>
-          </ul>
-          <button
-            type="button"
-            className="rounded-md border border-[#753991] px-4 py-2 text-sm font-semibold text-[#753991]"
-            onClick={onLogout}
-          >
-            Logout
-          </button>
-        </section>
+        <MeetingMinutes
+          detailId={meetingMinutesDetail}
+          onSelectMinute={onSelectMeetingMinute}
+          onBackToList={onBackToMeetingMinutes}
+          onBackToMembersArea={onBackToMembersArea}
+        />
       );
     }
 
-    return <MembersLoginForm onLogin={onLogin} />;
+    return (
+      <MembersArea
+        isOfficer={isOfficer}
+        onSelect={onSelectMemberSubSection}
+        onLogout={onLogout}
+      />
+    );
   }
 
   if (activeSection === "about") {

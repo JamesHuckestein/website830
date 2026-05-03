@@ -16,7 +16,12 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: {
+          executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        },
+      },
     },
   ],
 });
