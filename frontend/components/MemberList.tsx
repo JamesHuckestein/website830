@@ -1,30 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { dummyMembers } from "@/data/siteData";
+import { emailAllMembers, exportMembersCSV, getMembers, type MemberResponse } from "@/lib/api";
 
 type MemberListProps = {
+  token: string;
   isOfficer: boolean;
   onBack: () => void;
 };
 
-function membersToCSV(): string {
-  const headers = ["Member Number", "First Name", "Last Name", "Email", "Phone", "Birthday", "Officer Position", "Assembly Number"];
-  const rows = dummyMembers.map((m) => [
-    m.memberNumber, m.firstName, m.lastName, m.email, m.phone, m.birthday,
-    m.officerPosition ?? "", m.assemblyNumber ?? "",
-  ]);
-  return [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
-}
-
-export function MemberList({ isOfficer, onBack }: MemberListProps) {
+export function MemberList({ token, isOfficer, onBack }: MemberListProps) {
+  const [members, setMembers] = useState<MemberResponse[] | null>(null);
   const [emailMessage, setEmailMessage] = useState("");
   const [showEmailForm, setShowEmailForm] = useState(false);
 
-  const handleDownload = () => {
-    const csv = membersToCSV();
-    const blob = new Blob([csv], { type: "text/csv" });
+  useEffect(() => {
+    getMembers(token).then(setMembers).catch(() => setMembers([]));
+  }, [token]);
+
+  const handleDownload = async () => {
+    const blob = await exportMembersCSV(token);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -33,11 +29,16 @@ export function MemberList({ isOfficer, onBack }: MemberListProps) {
     URL.revokeObjectURL(url);
   };
 
-  const handleSendEmail = (e: React.FormEvent) => {
+  const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
+    await emailAllMembers(token, emailMessage);
     setEmailMessage("");
     setShowEmailForm(false);
   };
+
+  if (!members) {
+    return <p className="text-sm text-[#888888]">Loading...</p>;
+  }
 
   return (
     <section className="space-y-4">
@@ -53,7 +54,7 @@ export function MemberList({ isOfficer, onBack }: MemberListProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-[#E7E7E7]">
-            {dummyMembers.map((m) => (
+            {members.map((m) => (
               <tr key={m.memberNumber}>
                 <td className="py-2 pr-4 font-medium text-[#032147]">{m.firstName} {m.lastName}</td>
                 <td className="py-2 pr-4 text-[#888888]">{m.email}</td>

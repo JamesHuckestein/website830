@@ -3,21 +3,25 @@ import { describe, expect, it, vi } from "vitest";
 
 import { OfficerContacts } from "@/components/OfficerContacts";
 
+vi.mock("@/lib/api", () => ({
+  emailOfficer: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe("OfficerContacts", () => {
   it("renders all 14 officer Send Email buttons", () => {
-    render(<OfficerContacts onBack={vi.fn()} />);
+    render(<OfficerContacts token="test-token" onBack={vi.fn()} />);
     expect(screen.getAllByRole("button", { name: "Send Email" })).toHaveLength(14);
   });
 
   it("shows compose form when Send Email is clicked", () => {
-    render(<OfficerContacts onBack={vi.fn()} />);
+    render(<OfficerContacts token="test-token" onBack={vi.fn()} />);
     fireEvent.click(screen.getAllByRole("button", { name: "Send Email" })[0]);
     expect(screen.getByText("Message")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });
 
   it("returns to officer list when Cancel is clicked", () => {
-    render(<OfficerContacts onBack={vi.fn()} />);
+    render(<OfficerContacts token="test-token" onBack={vi.fn()} />);
     fireEvent.click(screen.getAllByRole("button", { name: "Send Email" })[0]);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getAllByRole("button", { name: "Send Email" })).toHaveLength(14);
@@ -25,7 +29,7 @@ describe("OfficerContacts", () => {
 
   it("calls onBack when back link is clicked", () => {
     const onBack = vi.fn();
-    render(<OfficerContacts onBack={onBack} />);
+    render(<OfficerContacts token="test-token" onBack={onBack} />);
     fireEvent.click(screen.getByRole("button", { name: "Back to Members Area" }));
     expect(onBack).toHaveBeenCalled();
   });

@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 
 type MembersLoginFormProps = {
-  onLogin: (membershipNumber: string, passcode: string) => boolean;
+  onLogin: (membershipNumber: string, passcode: string) => Promise<boolean>;
 };
 
 export function MembersLoginForm({ onLogin }: MembersLoginFormProps) {
@@ -11,14 +11,14 @@ export function MembersLoginForm({ onLogin }: MembersLoginFormProps) {
   const [passcode, setPasscode] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!membershipNumber || !passcode) {
       setError("Both membership number and passcode are required.");
       return;
     }
 
-    const isValid = onLogin(membershipNumber.trim(), passcode.trim());
+    const isValid = await onLogin(membershipNumber.trim(), passcode.trim());
     if (!isValid) {
       setError("Invalid membership number or passcode.");
       return;

@@ -2,16 +2,20 @@
 
 import { useState } from "react";
 
+import { submitNomination } from "@/lib/api";
+
 type NominationFormProps = {
+  token: string;
   onBack: () => void;
 };
 
-export function NominationForm({ onBack }: NominationFormProps) {
+export function NominationForm({ token, onBack }: NominationFormProps) {
   const [knight, setKnight] = useState("");
   const [family, setFamily] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    await submitNomination(token, knight, family);
     setKnight("");
     setFamily("");
   };

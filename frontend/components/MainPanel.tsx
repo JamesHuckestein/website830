@@ -22,9 +22,11 @@ type MainPanelProps = {
   activeSection: SectionId;
   isLoggedIn: boolean;
   isOfficer: boolean;
+  token: string | null;
+  memberNumber: string | null;
   memberSubSection: MemberSubSection | null;
   meetingMinutesDetail: string | null;
-  onLogin: (membershipNumber: string, passcode: string) => boolean;
+  onLogin: (membershipNumber: string, passcode: string) => Promise<boolean>;
   onLogout: () => void;
   onNavigateToSection: (section: SectionId) => void;
   onSelectMemberSubSection: (sub: MemberSubSection) => void;
@@ -37,6 +39,8 @@ export function MainPanel({
   activeSection,
   isLoggedIn,
   isOfficer,
+  token,
+  memberNumber,
   memberSubSection,
   meetingMinutesDetail,
   onLogin,
@@ -95,26 +99,27 @@ export function MainPanel({
     }
 
     if (memberSubSection === "contactInfo") {
-      return <ContactInfoForm memberNumber="8301001" onBack={onBackToMembersArea} />;
+      return <ContactInfoForm token={token!} memberNumber={memberNumber!} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "birthdays") {
-      return <BirthdayList onBack={onBackToMembersArea} />;
+      return <BirthdayList token={token!} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "prayerRequests") {
-      return <PrayerRequests onBack={onBackToMembersArea} />;
+      return <PrayerRequests token={token!} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "memberList") {
-      return <MemberList isOfficer={isOfficer} onBack={onBackToMembersArea} />;
+      return <MemberList token={token!} isOfficer={isOfficer} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "officers") {
-      return <OfficerContacts onBack={onBackToMembersArea} />;
+      return <OfficerContacts token={token!} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "nomination") {
-      return <NominationForm onBack={onBackToMembersArea} />;
+      return <NominationForm token={token!} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "meetingMinutes") {
       return (
         <MeetingMinutes
+          token={token!}
           detailId={meetingMinutesDetail}
           onSelectMinute={onSelectMeetingMinute}
           onBackToList={onBackToMeetingMinutes}

@@ -1,31 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { dummyPrayerRequests } from "@/data/siteData";
+import { createPrayerRequest, getPrayerRequests, type PrayerRequest } from "@/lib/api";
 
 type PrayerRequestsProps = {
+  token: string;
   onBack: () => void;
 };
 
-export function PrayerRequests({ onBack }: PrayerRequestsProps) {
-  const [requests, setRequests] = useState(dummyPrayerRequests);
+export function PrayerRequests({ token, onBack }: PrayerRequestsProps) {
+  const [requests, setRequests] = useState<PrayerRequest[] | null>(null);
   const [text, setText] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    getPrayerRequests(token).then(setRequests).catch(() => setRequests([]));
+  }, [token]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim()) return;
-    setRequests([
-      {
-        id: `pr-${Date.now()}`,
-        text: text.trim(),
-        submittedBy: "8301001",
-        submittedAt: new Date().toISOString(),
-      },
-      ...requests,
-    ]);
+    const created = await createPrayerRequest(token, text.trim());
+    setRequests((prev) => (prev ? [created, ...prev] : [created]));
     setText("");
   };
+
+  if (!requests) {
+    return <p className="text-sm text-[#888888]">Loading...</p>;
+  }
 
   return (
     <section className="space-y-6">

@@ -3,20 +3,23 @@
 import { useState } from "react";
 import Image from "next/image";
 
+import { emailOfficer } from "@/lib/api";
 import { officers } from "@/data/siteData";
 
 type OfficerContactsProps = {
+  token: string;
   onBack: () => void;
 };
 
-export function OfficerContacts({ onBack }: OfficerContactsProps) {
+export function OfficerContacts({ token, onBack }: OfficerContactsProps) {
   const [composingFor, setComposingFor] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
   const officer = composingFor ? officers.find((o) => o.title === composingFor) : null;
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (composingFor) await emailOfficer(token, composingFor, message);
     setMessage("");
     setComposingFor(null);
   };

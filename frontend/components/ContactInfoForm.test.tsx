@@ -1,18 +1,43 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ContactInfoForm } from "@/components/ContactInfoForm";
 
+vi.mock("@/lib/api", () => ({
+  getMember: vi.fn().mockResolvedValue({
+    memberNumber: "8301001",
+    firstName: "James",
+    lastName: "Huckestein",
+    addressStreet: "123 Oak St",
+    addressCity: "Denison",
+    addressState: "TX",
+    addressZip: "75020",
+    phone: "903-555-0101",
+    email: "james.huckestein@koc830.org",
+    birthday: "1968-03-15",
+    officerPosition: "Deputy Grand Knight",
+    assemblyNumber: "1234",
+    firstDegreeDate: null,
+    secondDegreeDate: null,
+    thirdDegreeDate: null,
+    fourthDegreeDate: null,
+  }),
+  updateMember: vi.fn().mockResolvedValue({}),
+}));
+
 describe("ContactInfoForm", () => {
-  it("pre-fills fields from the matching dummy member", () => {
-    render(<ContactInfoForm memberNumber="8301001" onBack={vi.fn()} />);
-    expect(screen.getByDisplayValue("123 Oak St, Denison, TX 75020")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("903-555-0101")).toBeInTheDocument();
+  it("pre-fills fields from the API member data", async () => {
+    render(<ContactInfoForm token="test-token" memberNumber="8301001" onBack={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("123 Oak St")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("903-555-0101")).toBeInTheDocument();
+    });
   });
 
-  it("calls onBack when back link is clicked", () => {
+  it("calls onBack when back link is clicked", async () => {
     const onBack = vi.fn();
-    render(<ContactInfoForm memberNumber="8301001" onBack={onBack} />);
+    render(<ContactInfoForm token="test-token" memberNumber="8301001" onBack={onBack} />);
+    await waitFor(() => screen.getByRole("button", { name: "Back to Members Area" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to Members Area" }));
     expect(onBack).toHaveBeenCalled();
   });
