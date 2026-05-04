@@ -215,7 +215,7 @@ export const sectionContent: Record<
     links: [
       { label: "USCCB", href: "https://www.usccb.org/" },
       { label: "Vatican", href: "https://www.vatican.va/" },
-      { label: "Local Diocese", href: "https://www.dioceseoftucson.org/" },
+      { label: "Local Diocese", href: "https://dallascatholic.org/" },
     ],
   },
   catholicism: {
@@ -225,12 +225,12 @@ export const sectionContent: Record<
   assembly: {
     title: "Assembly Sites",
     body: "Visit district assembly resources for fourth degree information.",
-    links: [{ label: "District Assembly", href: "https://www.kofc.org/" }],
+    links: [{ label: "Assembly 1601", href: "https://uknight.org/Assembly.asp?A=1601" }],
   },
   state: {
     title: "State Council Site",
     body: "See statewide announcements, programs, and forms.",
-    links: [{ label: "Arizona State Council", href: "https://www.azkofc.org/" }],
+    links: [{ label: "Texas State Council", href: "https://tkofc.org/" }],
   },
   supreme: {
     title: "Supreme Council Site",
