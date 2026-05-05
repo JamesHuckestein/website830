@@ -5,6 +5,7 @@ import os
 import uuid
 from datetime import date, timedelta
 
+import httpx
 import jwt
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +28,7 @@ app.add_middleware(
 
 _JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-in-production!!")
 _JWT_ALGORITHM = "HS256"
+_EMAIL_GATEWAY_URL = os.getenv("EMAIL_GATEWAY_URL")
 
 OFFICER_TITLES = {
     "Grand Knight", "Deputy Grand Knight", "Chancellor", "Advocate",
@@ -122,6 +124,13 @@ def _prayer_request_to_response(r: dict) -> dict:
         "submittedBy": r["submitted_by"],
         "submittedAt": r["submitted_at"],
     }
+
+
+def _send_email(to: str | list[str], subject: str, body: str) -> None:
+    if not _EMAIL_GATEWAY_URL:
+        logger.info("Email stub (EMAIL_GATEWAY_URL not set): to=%s subject=%s", to, subject)
+        return
+    httpx.post(_EMAIL_GATEWAY_URL, json={"to": to, "subject": subject, "body": body}, timeout=10)
 
 
 def _upcoming_birthdays(days: int = 30) -> list[dict]:
@@ -255,26 +264,33 @@ def get_meeting_minutes_detail(minutes_id: str, _payload: dict = Depends(_requir
 
 
 @app.post("/emails/officer")
-def email_officer(body: EmailOfficerRequest, _payload: dict = Depends(_require_auth)):
+def email_officer(body: EmailOfficerRequest, payload: dict = Depends(_require_auth)):
     officer = next((m for m in members_store if m.get("officer_position") == body.officerTitle), None)
     if officer is None:
         raise HTTPException(status_code=404, detail="Officer not found")
-    logger.info("Email stub: to=%s subject='Message from member' body=%s", officer["email"], body.message)
+    sender = next((m for m in members_store if m["member_number"] == payload["sub"]), None)
+    sender_name = f"{sender['first_name']} {sender['last_name']}" if sender else "A council member"
+    _send_email(
+        officer["email"],
+        f"Message from {sender_name}",
+        body.message,
+    )
     return {"success": True}
 
 
 @app.post("/nominations")
 def submit_nomination(body: NominationRequest, _payload: dict = Depends(_require_auth)):
     officer_emails = [m["email"] for m in members_store if _is_officer(m.get("officer_position"))]
-    logger.info(
-        "Email stub: to=%s subject='Nomination' knight=%s family=%s",
-        officer_emails, body.knightOfMonth, body.familyOfMonth,
+    nomination_body = (
+        f"Knight of the Month: {body.knightOfMonth}\n"
+        f"Family of the Month: {body.familyOfMonth}"
     )
+    _send_email(officer_emails, "Knight and Family of the Month Nomination", nomination_body)
     return {"success": True}
 
 
 @app.post("/emails/all-members")
 def email_all_members(body: EmailAllMembersRequest, _payload: dict = Depends(_require_officer)):
     all_emails = [m["email"] for m in members_store]
-    logger.info("Email stub: to=%s (all members) body=%s", all_emails, body.message)
+    _send_email(all_emails, "Message from Council 830 Officers", body.message)
     return {"success": True}
