@@ -1,10 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { OfficerContacts } from "@/components/OfficerContacts";
 
 vi.mock("@/lib/api", () => ({
-  emailOfficer: vi.fn().mockResolvedValue(undefined),
+  emailOfficer: vi.fn().mockResolvedValue({ success: true, message: "Your message has been sent." }),
 }));
 
 describe("OfficerContacts", () => {
@@ -18,6 +18,25 @@ describe("OfficerContacts", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Send Email" })[0]);
     expect(screen.getByText("Message")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
+  });
+
+  it("shows success modal after sending", async () => {
+    render(<OfficerContacts token="test-token" onBack={vi.fn()} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Send Email" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Success" })).toBeInTheDocument();
+      expect(screen.getByText("Your message has been sent.")).toBeInTheDocument();
+    });
+  });
+
+  it("returns to officer list after dismissing success modal", async () => {
+    render(<OfficerContacts token="test-token" onBack={vi.fn()} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Send Email" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => screen.getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.getAllByRole("button", { name: "Send Email" })).toHaveLength(14);
   });
 
   it("returns to officer list when Cancel is clicked", () => {

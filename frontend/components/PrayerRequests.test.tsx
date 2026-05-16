@@ -7,12 +7,7 @@ vi.mock("@/lib/api", () => ({
   getPrayerRequests: vi.fn().mockResolvedValue([
     { id: "pr-001", text: "Please pray for the healing of Tom Brady, who is recovering from surgery.", submittedBy: "8301004", submittedAt: "2026-04-28T10:15:00Z" },
   ]),
-  createPrayerRequest: vi.fn().mockResolvedValue({
-    id: "pr-new",
-    text: "Prayers for our community.",
-    submittedBy: "8301001",
-    submittedAt: "2026-05-01T00:00:00Z",
-  }),
+  createPrayerRequest: vi.fn().mockResolvedValue({ success: true, message: "Prayer request submitted." }),
 }));
 
 describe("PrayerRequests", () => {
@@ -23,7 +18,7 @@ describe("PrayerRequests", () => {
     });
   });
 
-  it("adds a new prayer request on submit", async () => {
+  it("shows success modal after submitting a prayer request", async () => {
     render(<PrayerRequests token="test-token" onBack={vi.fn()} />);
     await waitFor(() => screen.getByPlaceholderText("Enter your prayer intention..."));
     fireEvent.change(screen.getByPlaceholderText("Enter your prayer intention..."), {
@@ -31,8 +26,21 @@ describe("PrayerRequests", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
     await waitFor(() => {
-      expect(screen.getByText("Prayers for our community.")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Success" })).toBeInTheDocument();
+      expect(screen.getByText("Prayer request submitted.")).toBeInTheDocument();
     });
+  });
+
+  it("dismisses the modal when Dismiss is clicked", async () => {
+    render(<PrayerRequests token="test-token" onBack={vi.fn()} />);
+    await waitFor(() => screen.getByPlaceholderText("Enter your prayer intention..."));
+    fireEvent.change(screen.getByPlaceholderText("Enter your prayer intention..."), {
+      target: { value: "A test prayer." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    await waitFor(() => screen.getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("heading", { name: "Success" })).not.toBeInTheDocument();
   });
 
   it("calls onBack when back link is clicked", async () => {

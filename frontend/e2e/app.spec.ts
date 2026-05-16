@@ -61,6 +61,13 @@ test("prayer requests sub-section shows requests and accepts new submission", as
 
   await page.getByPlaceholder("Enter your prayer intention...").fill("Test prayer intention.");
   await page.getByRole("button", { name: "Submit" }).click();
+
+  // Success modal appears
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await expect(page.getByText("Prayer request submitted.")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+
+  // New request appears in list after modal is dismissed
   await expect(page.getByText("Test prayer intention.")).toBeVisible();
 
   await page.getByRole("button", { name: "Back to Members Area" }).click();
@@ -112,6 +119,35 @@ test("officer sees Email Members and Download Members buttons", async ({ page })
   await page.getByRole("button", { name: "Member List" }).click();
   await expect(page.getByRole("button", { name: "Email Members" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download Members" })).toBeVisible();
+});
+
+test("form submissions show success modal and reset on dismiss", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301001");
+  await page.getByLabel("Passcode").fill("faith830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  // Contact info save
+  await page.getByRole("button", { name: "Contact Information" }).click();
+  await expect(page.getByRole("heading", { name: "Contact Information" })).toBeVisible();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await expect(page.getByText("Contact information updated.")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByRole("heading", { name: "Contact Information" })).toBeVisible();
+
+  // Nomination send
+  await page.getByRole("button", { name: "Back to Members Area" }).click();
+  await page.getByRole("button", { name: "Knight and Family of the Month" }).click();
+  await page.getByLabel("Knight of the Month").fill("John Smith");
+  await page.getByLabel("Family of the Month").fill("Smith Family");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await expect(page.getByText("Nomination submitted to council officers.")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  // Fields cleared after dismiss
+  await expect(page.getByLabel("Knight of the Month")).toHaveValue("");
 });
 
 test("logout returns to login form", async ({ page }) => {

@@ -125,7 +125,10 @@ def test_update_member_contact_info():
         },
     )
     assert r.status_code == 200
-    m = r.json()
+    assert r.json()["success"] is True
+    assert "message" in r.json()
+    # Verify the update persisted
+    m = client.get("/members/8301004", headers=_auth()).json()
     assert m["addressStreet"] == "999 New St"
     assert m["addressCity"] == "Dallas"
     assert m["email"] == "mark.new@example.com"
@@ -200,13 +203,13 @@ def test_create_prayer_request():
         json={"text": "Prayers for our community."},
     )
     assert r.status_code == 200
-    item = r.json()
-    assert item["text"] == "Prayers for our community."
-    assert "id" in item
+    assert r.json()["success"] is True
+    assert "message" in r.json()
 
     # Confirm it appears in the list
     r2 = client.get("/prayer-requests", headers=_auth())
     assert len(r2.json()) == 6
+    assert any(item["text"] == "Prayers for our community." for item in r2.json())
 
 
 # ---------------------------------------------------------------------------

@@ -22,7 +22,7 @@ vi.mock("@/lib/api", () => ({
     thirdDegreeDate: null,
     fourthDegreeDate: null,
   }),
-  updateMember: vi.fn().mockResolvedValue({}),
+  updateMember: vi.fn().mockResolvedValue({ success: true, message: "Contact information updated." }),
 }));
 
 describe("ContactInfoForm", () => {
@@ -32,6 +32,25 @@ describe("ContactInfoForm", () => {
       expect(screen.getByDisplayValue("123 Oak St")).toBeInTheDocument();
       expect(screen.getByDisplayValue("903-555-0101")).toBeInTheDocument();
     });
+  });
+
+  it("shows success modal after saving", async () => {
+    render(<ContactInfoForm token="test-token" memberNumber="8301001" onBack={vi.fn()} />);
+    await waitFor(() => screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Success" })).toBeInTheDocument();
+      expect(screen.getByText("Contact information updated.")).toBeInTheDocument();
+    });
+  });
+
+  it("dismisses the modal when Dismiss is clicked", async () => {
+    render(<ContactInfoForm token="test-token" memberNumber="8301001" onBack={vi.fn()} />);
+    await waitFor(() => screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => screen.getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("heading", { name: "Success" })).not.toBeInTheDocument();
   });
 
   it("calls onBack when back link is clicked", async () => {

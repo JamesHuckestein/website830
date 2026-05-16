@@ -8,7 +8,7 @@ vi.mock("@/lib/api", () => ({
     { memberNumber: "8301001", firstName: "James", lastName: "Huckestein", email: "j@koc.org", phone: "903-555-0101", birthday: "1968-03-15", officerPosition: "Deputy Grand Knight", addressStreet: "", addressCity: "", addressState: "", addressZip: "", assemblyNumber: null, firstDegreeDate: null, secondDegreeDate: null, thirdDegreeDate: null, fourthDegreeDate: null },
     { memberNumber: "8301002", firstName: "John", lastName: "Akers", email: "john@koc.org", phone: "903-555-0102", birthday: "1955-11-28", officerPosition: "Grand Knight", addressStreet: "", addressCity: "", addressState: "", addressZip: "", assemblyNumber: null, firstDegreeDate: null, secondDegreeDate: null, thirdDegreeDate: null, fourthDegreeDate: null },
   ]),
-  emailAllMembers: vi.fn().mockResolvedValue(undefined),
+  emailAllMembers: vi.fn().mockResolvedValue({ success: true, message: "Message sent to all members." }),
   exportMembersCSV: vi.fn().mockResolvedValue(new Blob(["csv"], { type: "text/csv" })),
 }));
 
@@ -41,6 +41,17 @@ describe("MemberList", () => {
     await waitFor(() => screen.getByRole("button", { name: "Email Members" }));
     fireEvent.click(screen.getByRole("button", { name: "Email Members" }));
     expect(screen.getByText("Message to All Members")).toBeInTheDocument();
+  });
+
+  it("shows success modal after sending email to all members", async () => {
+    render(<MemberList token="test-token" isOfficer={true} onBack={vi.fn()} />);
+    await waitFor(() => screen.getByRole("button", { name: "Email Members" }));
+    fireEvent.click(screen.getByRole("button", { name: "Email Members" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Success" })).toBeInTheDocument();
+      expect(screen.getByText("Message sent to all members.")).toBeInTheDocument();
+    });
   });
 
   it("calls onBack when back link is clicked", async () => {

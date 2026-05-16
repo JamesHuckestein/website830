@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { getMember, updateMember, type MemberResponse } from "@/lib/api";
+import { SubmitModal } from "@/components/SubmitModal";
 
 type ContactInfoFormProps = {
   token: string;
@@ -18,6 +19,7 @@ export function ContactInfoForm({ token, memberNumber, onBack }: ContactInfoForm
   const [addressZip, setAddressZip] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [modal, setModal] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     getMember(token, memberNumber).then((m) => {
@@ -33,7 +35,12 @@ export function ContactInfoForm({ token, memberNumber, onBack }: ContactInfoForm
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateMember(token, memberNumber, { addressStreet, addressCity, addressState, addressZip, phone, email });
+    try {
+      const result = await updateMember(token, memberNumber, { addressStreet, addressCity, addressState, addressZip, phone, email });
+      setModal({ success: true, message: result.message });
+    } catch {
+      setModal({ success: false, message: "Failed to update contact information. Please try again." });
+    }
   };
 
   if (!member) {
@@ -41,7 +48,9 @@ export function ContactInfoForm({ token, memberNumber, onBack }: ContactInfoForm
   }
 
   return (
-    <section className="space-y-4">
+    <>
+      {modal && <SubmitModal success={modal.success} message={modal.message} onDismiss={() => setModal(null)} />}
+      <section className="space-y-4">
       <h2 className="text-2xl font-semibold text-[#032147]">Contact Information</h2>
       <p className="text-sm text-[#888888]">
         {member.firstName} {member.lastName} — Member #{member.memberNumber}
@@ -107,5 +116,6 @@ export function ContactInfoForm({ token, memberNumber, onBack }: ContactInfoForm
         Back to Members Area
       </button>
     </section>
+    </>
   );
 }

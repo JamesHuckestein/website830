@@ -222,7 +222,7 @@ def update_member(member_id: str, body: UpdateContactRequest, _payload: dict = D
     member["address_zip"] = body.addressZip
     member["phone"] = body.phone
     member["email"] = body.email
-    return _member_to_response(member)
+    return {"success": True, "message": "Contact information updated."}
 
 
 @app.get("/prayer-requests")
@@ -241,9 +241,9 @@ def create_prayer_request(body: PrayerRequestCreate, payload: dict = Depends(_re
         "submitted_by": payload["sub"],
         "submitted_at": date.today().isoformat() + "T00:00:00Z",
     }
-    prayer_requests_store.append(record)
+    prayer_requests_store.insert(0, record)
     logger.info("S3 stub: would write prayer request to %s", s3_key)
-    return _prayer_request_to_response(record)
+    return {"success": True, "message": "Prayer request submitted."}
 
 
 @app.get("/meeting-minutes")
@@ -275,7 +275,7 @@ def email_officer(body: EmailOfficerRequest, payload: dict = Depends(_require_au
         f"Message from {sender_name}",
         body.message,
     )
-    return {"success": True}
+    return {"success": True, "message": "Your message has been sent."}
 
 
 @app.post("/nominations")
@@ -286,11 +286,11 @@ def submit_nomination(body: NominationRequest, _payload: dict = Depends(_require
         f"Family of the Month: {body.familyOfMonth}"
     )
     _send_email(officer_emails, "Knight and Family of the Month Nomination", nomination_body)
-    return {"success": True}
+    return {"success": True, "message": "Nomination submitted to council officers."}
 
 
 @app.post("/emails/all-members")
 def email_all_members(body: EmailAllMembersRequest, _payload: dict = Depends(_require_officer)):
     all_emails = [m["email"] for m in members_store]
     _send_email(all_emails, "Message from Council 830 Officers", body.message)
-    return {"success": True}
+    return {"success": True, "message": "Message sent to all members."}

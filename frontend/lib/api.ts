@@ -75,8 +75,8 @@ export async function updateMember(
   token: string,
   memberNumber: string,
   body: { addressStreet: string; addressCity: string; addressState: string; addressZip: string; phone: string; email: string }
-): Promise<MemberResponse> {
-  return apiFetch<MemberResponse>(`/members/${memberNumber}`, token, {
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/members/${memberNumber}`, token, {
     method: "PUT",
     body: JSON.stringify(body),
   });
@@ -98,8 +98,8 @@ export async function getPrayerRequests(token: string): Promise<PrayerRequest[]>
   return apiFetch<PrayerRequest[]>("/prayer-requests", token);
 }
 
-export async function createPrayerRequest(token: string, text: string): Promise<PrayerRequest> {
-  return apiFetch<PrayerRequest>("/prayer-requests", token, {
+export async function createPrayerRequest(token: string, text: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>("/prayer-requests", token, {
     method: "POST",
     body: JSON.stringify({ text }),
   });
@@ -113,22 +113,22 @@ export async function getMeetingMinutesDetail(token: string, id: string): Promis
   return apiFetch<MeetingMinutesDetail>(`/meeting-minutes/${id}`, token);
 }
 
-export async function emailOfficer(token: string, officerTitle: string, message: string): Promise<void> {
-  await apiFetch<{ success: boolean }>("/emails/officer", token, {
+export async function emailOfficer(token: string, officerTitle: string, message: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>("/emails/officer", token, {
     method: "POST",
     body: JSON.stringify({ officerTitle, message }),
   });
 }
 
-export async function submitNomination(token: string, knightOfMonth: string, familyOfMonth: string): Promise<void> {
-  await apiFetch<{ success: boolean }>("/nominations", token, {
+export async function submitNomination(token: string, knightOfMonth: string, familyOfMonth: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>("/nominations", token, {
     method: "POST",
     body: JSON.stringify({ knightOfMonth, familyOfMonth }),
   });
 }
 
-export async function emailAllMembers(token: string, message: string): Promise<void> {
-  await apiFetch<{ success: boolean }>("/emails/all-members", token, {
+export async function emailAllMembers(token: string, message: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>("/emails/all-members", token, {
     method: "POST",
     body: JSON.stringify({ message }),
   });
