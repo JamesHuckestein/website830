@@ -5,11 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Repository Layout
 
 ```
-frontend/    Next.js 16 app (the only active codebase)
-docs/        PLAN.md — phased project roadmap (Parts 1-9)
+frontend/    Next.js 16 app
+backend/     FastAPI app (in-memory stores seeded from docs/schema.json)
+docs/        PLAN.md — original phased roadmap (Parts 1-9)
+             Calendar-Plan.md — Phase-2 roadmap for the interactive calendar feature
+scripts/    start.sh / stop.sh dev orchestration (Mac-only)
 ```
-
-The backend (Parts 2-9 of the plan) does not exist yet. All current work is in `frontend/`.
 
 ## Development Commands
 
@@ -40,6 +41,8 @@ The app is a single-page client-rendered Next.js app. `app/page.tsx` renders `<A
 `data/siteData.ts` is the single source of truth for all content and types (`SectionId`, `NavItem`, `Officer`).
 
 `lib/auth.ts` has demo credentials for the members login (no backend yet).
+
+The `events` SectionId renders a live interactive `<Calendar />` (no longer a static `sectionContent` blurb); officers see an additional "Calendar Updates" entry inside the members area for Add/Edit/Delete of events. See `docs/Calendar-Plan.md` for the phased rollout.
 
 See `frontend/CLAUDE.md` for full component contracts, data shapes, and testing details.
 

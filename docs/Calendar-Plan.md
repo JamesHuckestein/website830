@@ -27,6 +27,17 @@
  - When a day is highlighted on the calendar and the Edit button is clicked a pop-up form window will appear with the Title and Description already populated with the previously entered text.  When the Save button is clicked on this form the updated entry text will be saved and the title will be displayed on the Members Only View and the General View.
  - When a day is highlighted on the calendar and the Delete button is clicked a pop-up window will appear with the text "Will you confirm?" and a Yes button and No button.  If the Yes button is selected the Title and Description will be deleted.  The General View and the Members Only View will have the Title deleted from the calendar.  If the No button is selected the pop-up window will close and no further action will be taken.
 
+## Design decisions (locked during Part 1)
+ - **Sidebar slot**: The existing `events` SectionId / "Events Calendar" sidebar item is reused; the static `sectionContent.events` blurb is removed.
+ - **Events per day**: Maximum of 3. Server enforces with HTTP 409 Conflict on POST when a 4th event is attempted for the same day.
+ - **Storage**: In-memory store mirroring prayer requests. Persistence to a production database is deferred to production work (out of scope here).
+ - **Event fields**: Title (required, ≤200 chars), Description (required, ≤2000 chars), Time-of-day (optional, `"HH:MM"` 24-hour string, rendered 12-hour am/pm), Location (optional, ≤200 chars).
+ - **Date storage**: `day` as `YYYY-MM-DD` (no timezone), matching prayer-requests' use of `date.today()`.
+ - **Adjacent-month cells**: blank — no day number, no events.
+ - **Edit/Delete with no event on the selected day**: pop-up "No event on this day."
+ - **Edit/Delete when a day has multiple events**: small picker modal lists the day's events; officer chooses one.
+ - **Add when the day already has 3 events**: backend returns 409; frontend shows error pop-up.
+
 ## Part 1: Plan
  - Analyze the frontend and backend code base.
  - Document the proposed changes in CLAUDE.md.
@@ -34,35 +45,70 @@
  - Clarify any questions and get user approval before making any code changes.
 
 ## Part 2: Backend Scaffolding
- - Extend the backend to account for the new calendar features.
- - Write Pytest unit tests for the new features.
+ - Add an `events` array to `docs/schema.json` with ~3 seed events anchored on the current month.
+ - Event record shape: `{id, day (YYYY-MM-DD), title, description, time_of_day?, location?, created_by, created_at, updated_at}`.
+ - Add `events_store` to `backend/app/seed.py` (deep-copied from schema like the other stores) and extend `reset_to_seed()`.
+ - Add Pydantic models `EventCreate` and `EventUpdate` with `Field(...)` length caps on each text field.
+ - Add `_event_to_response(e)` helper returning camelCase keys (mirrors `_prayer_request_to_response`).
+ - Add endpoints in `backend/app/main.py`:
+   - `GET /events` — public; optional `?month=YYYY-MM` filter.
+   - `POST /events` — officer-only; rejects with 409 if the day already holds 3 events.
+   - `PUT /events/{id}` — officer-only; 404 if id missing.
+   - `DELETE /events/{id}` — officer-only; 404 if id missing.
+ - Pytest unit tests:
+   - GET shape (camelCase fields; no auth required).
+   - POST happy path; POST blocked at max-3-per-day (409); POST blocked for non-officer (403); POST length-cap rejections (422).
+   - PUT happy path; PUT 404 for unknown id; PUT non-officer rejected.
+   - DELETE happy path; DELETE 404 for unknown id; DELETE non-officer rejected.
 
 ## Part 3: General View UI (front end)
- - Add the general calendar view to the frontend that any visitor can view.
- - Add a couple of example events to the current month calendar.
+ - Add `getEvents(month?)` and the `Event` type to `frontend/lib/api.ts` (no auth header).
+ - Add `CalendarGrid` shared component: 7-column Mon→Sun grid; props `{year, month, events, onDayClick?, selectedDay?, renderDay?}`; blank leading/trailing cells outside the visible month; up to 3 event-title links per cell.
+ - Add public `Calendar` component: month-state, prev/next arrow buttons, fetches via `getEvents(month)` on mount and on month change; clicking an event title opens `EventDetailModal`.
+ - Add `EventDetailModal`: title, description, time (rendered 12-hour am/pm), location, Close button.
+ - Wire `MainPanel.tsx` so `activeSection === "events"` renders `<Calendar />`; remove the `events` entry from `sectionContent`.
+ - Add ~3 seed events to the current month so the empty view never looks blank.
+ - Unit tests: grid shows correct day numbers, leading blanks render with no number, prev/next refetch, event-title click opens the detail modal.
 
 ## Part 4: Officer View UI (front end)
- - Add the officer calendar view to the frontend.
- - Add the buttons specific to the officer view to the calendar.
- - Add the pop-up forms used to add, edit and delete new events using dummy data.
+ - Add `"calendarUpdates"` to `MemberSubSection` in `data/siteData.ts`.
+ - Add an officer-only "Calendar Updates" button in `MembersArea` (use the `isOfficer` prop currently shadowed as `_isOfficer`).
+ - Add `CalendarUpdates` component: reuses `CalendarGrid` with `selectedDay` state and a day-click handler; renders Add / Edit / Delete buttons below the grid.
+ - Add `EventFormModal`: Title (required), Description (required), Time `<input type="time">` (optional), Location (optional); Save and Cancel buttons.
+ - Add `DayEventPicker` modal: appears when Edit or Delete is clicked on a day that holds ≥2 events; lists the events and lets the officer pick one.
+ - "Please select a day first." pop-up: rendered via `SubmitModal` (error variant) when Add/Edit/Delete is clicked with no selected day.
+ - "No event on this day." pop-up: rendered the same way when Edit/Delete is clicked on a day with zero events.
+ - "Max 3 events" pop-up: rendered when Add is clicked on a day that already holds 3 events.
+ - Delete confirmation: reuse the existing `ConfirmDialog` with copy "Will you confirm?" and Yes / No buttons (matching the spec verbatim).
+ - All Add/Edit/Delete mutations operate on dummy in-memory state in this part — no API calls yet (those land in Part 8).
+ - Unit tests: selection highlights the clicked day; no-selection pop-up; no-event-on-day pop-up; max-3 pop-up; form save updates the dummy state; multi-event picker flow; delete confirm Yes/No.
 
-## Part 5: Demo Login 
- - Add unit tests to ensure general visitors and regular members are not able to access the Calendar Updates view that only officers are able to see.
+## Part 5: Demo Login
+ - Vitest unit: visitor (not logged in) → "Calendar Updates" button not in DOM.
+ - Vitest unit: regular non-officer member → "Calendar Updates" button not in DOM.
+ - Vitest unit: officer → "Calendar Updates" button visible and navigates to the new view.
+ - Pytest backend: explicit tests confirm `POST /events`, `PUT /events/{id}`, `DELETE /events/{id}` reject a non-officer JWT with 403.
+ - Playwright E2E: non-officer login (8301004 / hope830) confirms no Calendar Updates entry.
 
 ## Part 6: Database Schema
- - Update the database schema to keep track of the events and their titles.
+ - Add `backend/migrations/0001_events.sql` capturing the DDL for the eventual production `events` table (id PK, day, title, description, time_of_day, location, created_by FK → members, created_at, updated_at; indexes on `day` and `created_by`).
+ - Add a short data-model note to `docs/Calendar-Plan.md` (or a new `docs/data-model.md`) describing the relationship to the in-memory store.
+ - No runtime code change in this part — DDL is captured for the future RDS migration only.
 
 ## Part 7: Backend API Routes
- - Update the backend to keep track of the current date and month.
- - Update the routes so that officers can add, edit and update events to the calendar.
+ - Confirm `created_by`, `created_at`, `updated_at` are populated on POST and that `updated_at` is bumped on PUT.
+ - Add a `_today()` helper returning `date.today()` so tests can pin "today" deterministically; route all server-side day comparisons through it.
+ - Integration test exercising the full create → list → update → delete lifecycle against the live in-memory store.
+ - Document month-filter semantics (`?month=YYYY-MM` returns events whose `day` starts with that string).
 
 ## Part 8: Frontend + Backend Integration
- - Replace dummy data in add, edit and delete components in the officer calendar updata area with API calls.
- - Unit tests mock the API; E2E tests hit the real running backend
- - Database is updated when forms are submitted
- 
+ - Add `createEvent`, `updateEvent`, `deleteEvent` to `frontend/lib/api.ts`.
+ - Replace the dummy-state mutators in `CalendarUpdates` with these API calls.
+ - After every successful Add / Edit / Delete, refetch the visible month so the officer view and the public view stay consistent.
+ - Playwright E2E: officer creates an event → public Calendar shows it → officer edits → still in sync in both views → officer deletes → gone from both views.
 
 ## Part 9: Full Form Submission with Response UI
-- Backend returns `{success: boolean, message: string}` on all write endpoints
-- Frontend shows a modal after each submission: success or error message
-- Modal has a dismiss button; forms reset on success
+ - Reuse the existing `SubmitModal` for success/error feedback after every Add / Edit / Delete.
+ - On success: form modal closes, success modal dismisses, refetch fires (re-using the Part 8 refresh).
+ - On error: error modal shown; form modal remains open with the user's values preserved so they can correct and retry.
+ - Backend write endpoints already return `{success: boolean, message: string}` (Part 2 spec) — the frontend wires that message verbatim into the modal.

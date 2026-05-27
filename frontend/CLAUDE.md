@@ -30,13 +30,35 @@ MainPanel      — switches on activeSection; renders one of:
                  "members" shows login form or members content based on isLoggedIn
 HomeCarousel   — auto-advances every 5 s; Previous/Next buttons; click navigates to "officers"
 MembersLoginForm — controlled form; calls onLogin(membershipNumber, passcode)
+
+Calendar         — public, renders for activeSection === "events"
+                   month state + prev/next arrows; fetches via getEvents(month);
+                   uses CalendarGrid; opens EventDetailModal on event-title click
+CalendarUpdates  — officer-only members sub-section (memberSubSection === "calendarUpdates")
+                   reuses CalendarGrid with selectedDay state; renders Add/Edit/Delete buttons;
+                   opens EventFormModal / DayEventPicker / ConfirmDialog as needed
+CalendarGrid     — shared, presentational: 7-column Mon→Sun grid; props
+                   { year, month, events, selectedDay?, onDayClick? }; blank leading/trailing
+                   cells outside the visible month; up to 3 event-title links per day cell
+EventDetailModal — public read-only popover: title, description, time (12-hour), location, Close
+EventFormModal   — officer form: Title (required), Description (required),
+                   Time (optional <input type="time">), Location (optional); Save / Cancel
+DayEventPicker   — small list modal used when Edit/Delete is invoked on a day with ≥2 events
+ConfirmDialog    — reused from prayer-requests work for the "Will you confirm?" delete prompt
 ```
 
 ## Data & Auth
 
 `data/siteData.ts` — single source of truth for all content:
-- Types: `SectionId` (union), `NavItem`, `Officer`
+- Types: `SectionId` (union), `NavItem`, `Officer`, `MemberSubSection` (includes `"calendarUpdates"`)
 - Exports: `councilInfo`, `aboutCouncilDetails`, `navItems`, `officers[]`, `sectionContent`
+- Note: the `events` SectionId is no longer in `sectionContent` — it renders `<Calendar />` directly from `MainPanel`.
+
+`lib/api.ts` — typed API client:
+- Members: `loginMember`, `getMembers`, `getMember`, `updateMember`, `getBirthdays`, `exportMembersCSV`
+- Prayer requests: `getPrayerRequests`, `createPrayerRequest`, `deletePrayerRequest`, `getPublicPrayerRequests`
+- Meeting minutes: `getMeetingMinutes`, `getMeetingMinutesDetail`
+- Events (calendar): `getEvents(month?)`, `createEvent`, `updateEvent`, `deleteEvent` — write methods require an officer JWT; backend enforces the 3-events-per-day cap with HTTP 409 Conflict.
 
 `lib/auth.ts` — `authenticateMember(membershipNumber, passcode): boolean`
 - Demo credentials: `{ "8301001": "faith830", "8301002": "charity830" }`
