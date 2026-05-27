@@ -74,6 +74,58 @@ test("prayer requests sub-section shows requests and accepts new submission", as
   await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
 });
 
+test("member can delete own prayer request and it disappears from the public list", async ({ page }) => {
+  // Log in as 8301004 (owns the "Tom Brady" seed prayer request)
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301004");
+  await page.getByLabel("Passcode").fill("hope830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Prayer Requests" }).click();
+  await expect(page.getByText(/Tom Brady/)).toBeVisible();
+
+  // Tom Brady row is owned by this member — its checkbox is the first one
+  await page.getByRole("checkbox").first().check();
+  await page.getByRole("button", { name: "Delete Selected (1)" }).click();
+  await expect(page.getByRole("heading", { name: "Delete prayer request(s)?" })).toBeVisible();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText(/Tom Brady/)).not.toBeVisible();
+
+  // Log out and verify the public prayer-requests view also reflects the delete
+  await page.getByRole("button", { name: "Back to Members Area" }).click();
+  await page.getByRole("button", { name: "Logout" }).click();
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Prayer Requests" }).click();
+  await expect(page.getByRole("heading", { name: "Prayer Requests" })).toBeVisible();
+  await expect(page.getByText("Current Intentions")).toBeVisible();
+  await expect(page.getByText(/Tom Brady/)).not.toBeVisible();
+});
+
+test("officer can delete another member's prayer request", async ({ page }) => {
+  // Grand Knight 8301002 (officer) deletes a request owned by 8301006
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Prayer Requests" }).click();
+  const targetText = /community center|first responders|comfort|Smith|parish|home/i; // any seed text other than Tom Brady is fine
+  await expect(page.getByText(targetText).first()).toBeVisible();
+
+  // Every checkbox is rendered for an officer; pick the row matching id 0002 (submitted by 8301006)
+  const targetRow = page.getByRole("listitem").filter({ has: page.getByLabel("Select prayer request a1b2c3d4-0002-0000-0000-000000000002") });
+  await targetRow.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Delete Selected (1)" }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(targetRow).toHaveCount(0);
+});
+
 test("meeting minutes two-level navigation", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Members Login" }).click();

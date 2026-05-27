@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.seed import meeting_minutes_store, members_store, prayer_requests_store
 
@@ -57,7 +57,7 @@ class UpdateContactRequest(BaseModel):
     email: str
 
 class PrayerRequestCreate(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=1000)
 
 class EmailOfficerRequest(BaseModel):
     officerTitle: str
@@ -230,6 +230,14 @@ def get_prayer_requests(_payload: dict = Depends(_require_auth)):
     return [_prayer_request_to_response(r) for r in prayer_requests_store]
 
 
+@app.get("/prayer-requests/public")
+def get_prayer_requests_public():
+    return [
+        {"id": r["id"], "text": r.get("text", ""), "submittedAt": r["submitted_at"]}
+        for r in prayer_requests_store
+    ]
+
+
 @app.post("/prayer-requests")
 def create_prayer_request(body: PrayerRequestCreate, payload: dict = Depends(_require_auth)):
     new_id = str(uuid.uuid4())
@@ -244,6 +252,17 @@ def create_prayer_request(body: PrayerRequestCreate, payload: dict = Depends(_re
     prayer_requests_store.insert(0, record)
     logger.info("S3 stub: would write prayer request to %s", s3_key)
     return {"success": True, "message": "Prayer request submitted."}
+
+
+@app.delete("/prayer-requests/{request_id}")
+def delete_prayer_request(request_id: str, payload: dict = Depends(_require_auth)):
+    for i, r in enumerate(prayer_requests_store):
+        if r["id"] == request_id:
+            if r["submitted_by"] != payload["sub"] and not payload.get("isOfficer"):
+                raise HTTPException(status_code=403, detail="You can only delete your own prayer requests.")
+            prayer_requests_store.pop(i)
+            return {"success": True, "message": "Prayer request deleted."}
+    raise HTTPException(status_code=404, detail="Prayer request not found.")
 
 
 @app.get("/meeting-minutes")

@@ -26,6 +26,12 @@ export type PrayerRequest = {
   submittedAt: string;
 };
 
+export type PublicPrayerRequest = {
+  id: string;
+  text: string;
+  submittedAt: string;
+};
+
 export type MeetingMinutesSummary = {
   id: string;
   title: string;
@@ -103,6 +109,18 @@ export async function createPrayerRequest(token: string, text: string): Promise<
     method: "POST",
     body: JSON.stringify({ text }),
   });
+}
+
+export async function deletePrayerRequest(token: string, id: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/prayer-requests/${id}`, token, {
+    method: "DELETE",
+  });
+}
+
+export async function getPublicPrayerRequests(): Promise<PublicPrayerRequest[]> {
+  const res = await fetch(`${API_BASE}/prayer-requests/public`);
+  if (!res.ok) throw new Error(`API ${res.status}: /prayer-requests/public`);
+  return res.json() as Promise<PublicPrayerRequest[]>;
 }
 
 export async function getMeetingMinutes(token: string): Promise<MeetingMinutesSummary[]> {

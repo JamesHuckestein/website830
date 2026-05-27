@@ -10,6 +10,7 @@ import { MembersLoginForm } from "@/components/MembersLoginForm";
 import { NominationForm } from "@/components/NominationForm";
 import { OfficerContacts } from "@/components/OfficerContacts";
 import { PrayerRequests } from "@/components/PrayerRequests";
+import { PublicPrayerRequests } from "@/components/PublicPrayerRequests";
 import {
   aboutCouncilDetails,
   officers,
@@ -105,7 +106,7 @@ export function MainPanel({
       return <BirthdayList token={token!} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "prayerRequests") {
-      return <PrayerRequests token={token!} onBack={onBackToMembersArea} />;
+      return <PrayerRequests token={token!} memberNumber={memberNumber!} isOfficer={isOfficer} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "memberList") {
       return <MemberList token={token!} isOfficer={isOfficer} onBack={onBackToMembersArea} />;
@@ -215,6 +216,10 @@ export function MainPanel({
         </div>
       </section>
     );
+  }
+
+  if (activeSection === "prayer") {
+    return <PublicPrayerRequests />;
   }
 
   const content = sectionContent[activeSection];

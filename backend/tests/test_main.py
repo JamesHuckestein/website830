@@ -212,6 +212,91 @@ def test_create_prayer_request():
     assert any(item["text"] == "Prayers for our community." for item in r2.json())
 
 
+def test_create_prayer_request_rejects_too_long_text():
+    r = client.post(
+        "/prayer-requests",
+        headers=_auth(),
+        json={"text": "x" * 1001},
+    )
+    assert r.status_code == 422
+
+
+def test_create_prayer_request_rejects_empty_text():
+    r = client.post(
+        "/prayer-requests",
+        headers=_auth(),
+        json={"text": ""},
+    )
+    assert r.status_code == 422
+
+
+def test_create_prayer_request_accepts_max_length_text():
+    r = client.post(
+        "/prayer-requests",
+        headers=_auth(),
+        json={"text": "x" * 1000},
+    )
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+
+
+def test_delete_prayer_request_by_owner():
+    target_id = "a1b2c3d4-0001-0000-0000-000000000001"  # submitted_by 8301004
+    r = client.delete(f"/prayer-requests/{target_id}", headers=_auth("8301004", "hope830"))
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    listing = client.get("/prayer-requests", headers=_auth()).json()
+    assert all(item["id"] != target_id for item in listing)
+    assert len(listing) == 4
+
+
+def test_delete_prayer_request_not_found():
+    r = client.delete("/prayer-requests/no-such-id", headers=_auth())
+    assert r.status_code == 404
+
+
+def test_delete_prayer_request_forbidden_for_non_owner_non_officer():
+    # request id ...0002 was submitted by 8301006; 8301004 (hope830) is a non-officer member
+    target_id = "a1b2c3d4-0002-0000-0000-000000000002"
+    r = client.delete(f"/prayer-requests/{target_id}", headers=_non_officer_auth())
+    assert r.status_code == 403
+    listing = client.get("/prayer-requests", headers=_auth()).json()
+    assert any(item["id"] == target_id for item in listing)
+
+
+def test_delete_prayer_request_allowed_for_officer_on_other_members_request():
+    # request id ...0001 was submitted by 8301004; 8301002 is Grand Knight (officer)
+    target_id = "a1b2c3d4-0001-0000-0000-000000000001"
+    r = client.delete(f"/prayer-requests/{target_id}", headers=_officer_auth())
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    listing = client.get("/prayer-requests", headers=_auth()).json()
+    assert all(item["id"] != target_id for item in listing)
+
+
+def test_delete_prayer_request_requires_auth():
+    r = client.delete("/prayer-requests/a1b2c3d4-0001-0000-0000-000000000001")
+    assert r.status_code in (401, 403)
+
+
+def test_public_prayer_requests_no_auth_required():
+    r = client.get("/prayer-requests/public")
+    assert r.status_code == 200
+    items = r.json()
+    assert len(items) == 5
+    for item in items:
+        assert set(item.keys()) == {"id", "text", "submittedAt"}
+        assert "submittedBy" not in item
+
+
+def test_public_prayer_requests_reflects_deletes():
+    target_id = "a1b2c3d4-0001-0000-0000-000000000001"
+    client.delete(f"/prayer-requests/{target_id}", headers=_auth("8301004", "hope830"))
+    public = client.get("/prayer-requests/public").json()
+    assert all(item["id"] != target_id for item in public)
+    assert len(public) == 4
+
+
 # ---------------------------------------------------------------------------
 # Meeting minutes
 # ---------------------------------------------------------------------------
