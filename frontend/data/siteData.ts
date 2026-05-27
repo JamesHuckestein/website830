@@ -32,7 +32,8 @@ export type MemberSubSection =
   | "memberList"
   | "officers"
   | "nomination"
-  | "meetingMinutes";
+  | "meetingMinutes"
+  | "calendarUpdates";
 
 export const OFFICER_TITLES = [
   "Grand Knight",
@@ -130,16 +131,12 @@ export const officers: Officer[] = [
 ];
 
 export const sectionContent: Record<
-  Exclude<SectionId, "home" | "officers" | "members" | "about">,
+  Exclude<SectionId, "home" | "officers" | "members" | "about" | "events">,
   { title: string; body: string; links?: { label: string; href: string }[] }
 > = {
   prayer: {
     title: "Prayer Requests",
     body: "Please keep our parish families, clergy, and first responders in your prayers. Contact the council office to submit intentions.",
-  },
-  events: {
-    title: "Events Calendar",
-    body: "Upcoming events include monthly meetings, parish breakfasts, and service projects. Dates and times are posted each month.",
   },
   news: {
     title: "News & Announcements",

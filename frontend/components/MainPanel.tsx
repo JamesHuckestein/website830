@@ -1,6 +1,8 @@
 import Image from "next/image";
 
 import { BirthdayList } from "@/components/BirthdayList";
+import { Calendar } from "@/components/Calendar";
+import { CalendarUpdates } from "@/components/CalendarUpdates";
 import { ContactInfoForm } from "@/components/ContactInfoForm";
 import { HomeCarousel } from "@/components/HomeCarousel";
 import { MeetingMinutes } from "@/components/MeetingMinutes";
@@ -128,6 +130,9 @@ export function MainPanel({
         />
       );
     }
+    if (memberSubSection === "calendarUpdates" && isOfficer) {
+      return <CalendarUpdates token={token!} onBack={onBackToMembersArea} />;
+    }
 
     return (
       <MembersArea
@@ -220,6 +225,10 @@ export function MainPanel({
 
   if (activeSection === "prayer") {
     return <PublicPrayerRequests />;
+  }
+
+  if (activeSection === "events") {
+    return <Calendar />;
   }
 
   const content = sectionContent[activeSection];

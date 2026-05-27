@@ -202,6 +202,127 @@ test("form submissions show success modal and reset on dismiss", async ({ page }
   await expect(page.getByLabel("Knight of the Month")).toHaveValue("");
 });
 
+test("non-officer does not see Calendar Updates entry in members area", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301004");
+  await page.getByLabel("Passcode").fill("hope830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("button", { name: "Calendar Updates" })).toHaveCount(0);
+});
+
+test("Add form stays open with values preserved when the backend returns an error", async ({ page }) => {
+  // Intercept POST /events to simulate a backend error with a `detail` payload.
+  await page.route("**/events", (route) => {
+    if (route.request().method() === "POST") {
+      route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Server is temporarily unavailable." }),
+      });
+    } else {
+      route.continue();
+    }
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Calendar Updates" }).click();
+
+  await page.getByRole("button", { name: "Select day 13" }).click();
+  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Title").fill("Drafted Title");
+  await page.getByLabel("Description").fill("Drafted body.");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Backend error surfaces verbatim in the modal
+  await expect(page.getByRole("heading", { name: "Error" })).toBeVisible();
+  await expect(page.getByText("Server is temporarily unavailable.")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+
+  // Form is still open, values preserved
+  await expect(page.getByRole("heading", { name: "Add Event" })).toBeVisible();
+  await expect(page.getByLabel("Title")).toHaveValue("Drafted Title");
+  await expect(page.getByLabel("Description")).toHaveValue("Drafted body.");
+  await page.getByRole("button", { name: "Cancel" }).click();
+});
+
+test("officer Add/Edit/Delete reflects in the public Calendar view", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Calendar Updates" }).click();
+  await expect(page.getByRole("heading", { name: "Calendar Updates" })).toBeVisible();
+
+  // Add — day 13 starts empty in seed
+  await page.getByRole("button", { name: "Select day 13" }).click();
+  await page.getByRole("button", { name: "Add" }).click();
+  await expect(page.getByRole("heading", { name: "Add Event" })).toBeVisible();
+  await page.getByLabel("Title").fill("E2E Sync Event");
+  await page.getByLabel("Description").fill("Created from the officer view.");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("E2E Sync Event")).toBeVisible();
+
+  // Confirm it appears in the public Calendar
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Events Calendar" }).click();
+  await expect(page.getByText("E2E Sync Event")).toBeVisible();
+
+  // Back to Calendar Updates and edit
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Members Login" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Calendar Updates" }).click();
+  await page.getByRole("button", { name: "Select day 13" }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByRole("heading", { name: "Edit Event" })).toBeVisible();
+  await page.getByLabel("Title").fill("E2E Edited Event");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("E2E Edited Event")).toBeVisible();
+  await expect(page.getByText("E2E Sync Event")).not.toBeVisible();
+
+  // Confirm edit on public side
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Events Calendar" }).click();
+  await expect(page.getByText("E2E Edited Event")).toBeVisible();
+
+  // Back to Calendar Updates and delete
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Members Login" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Calendar Updates" }).click();
+  await page.getByRole("button", { name: "Select day 13" }).click();
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByText("Will you confirm?")).toBeVisible();
+  await page.getByRole("button", { name: "Yes" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("E2E Edited Event")).not.toBeVisible();
+
+  // Confirm gone from public Calendar
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Events Calendar" }).click();
+  await expect(page.getByText("E2E Edited Event")).not.toBeVisible();
+});
+
+test("officer sees Calendar Updates entry and can open the officer calendar view", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
+  await page.getByRole("main").getByRole("button", { name: "Calendar Updates" }).click();
+  await expect(page.getByRole("heading", { name: "Calendar Updates" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
+});
+
 test("logout returns to login form", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Members Login" }).click();

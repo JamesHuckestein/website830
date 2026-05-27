@@ -112,3 +112,27 @@
  - On success: form modal closes, success modal dismisses, refetch fires (re-using the Part 8 refresh).
  - On error: error modal shown; form modal remains open with the user's values preserved so they can correct and retry.
  - Backend write endpoints already return `{success: boolean, message: string}` (Part 2 spec) — the frontend wires that message verbatim into the modal.
+
+## Data Model (Part 6 reference)
+
+Today the calendar's events live in an in-memory Python list (`events_store` in `backend/app/seed.py`), deep-copied from `docs/schema.json` on every backend startup. The `reset_to_seed()` helper restores it between tests. Mutations made via the live API are lost on restart — same pattern as `prayer_requests_store` and `meeting_minutes_store`.
+
+The target production shape is captured in `backend/migrations/0001_events.sql`. It is **not** executed at runtime today; the file exists so the eventual RDS migration has an approved contract to apply.
+
+| Field         | Backend (Python dict)   | API (camelCase)   | SQL (`events` table)           | Notes |
+|---------------|-------------------------|-------------------|--------------------------------|-------|
+| Id            | `id`                    | `id`              | `id UUID PRIMARY KEY`          | UUID; backend mints with `uuid.uuid4()`. |
+| Day           | `day`                   | `day`             | `day DATE NOT NULL`            | `YYYY-MM-DD`; matches `EventCreate.day` regex. |
+| Title         | `title`                 | `title`           | `title VARCHAR(200) NOT NULL`  | Required, 1–200 chars. |
+| Description   | `description`           | `description`     | `description VARCHAR(2000) NOT NULL` | Required, 1–2000 chars. |
+| Time of day   | `time_of_day`           | `timeOfDay`       | `time_of_day TIME`             | Optional; `"HH:MM"` 24-hour string. |
+| Location      | `location`              | `location`        | `location VARCHAR(200)`        | Optional, ≤200 chars. |
+| Created by    | `created_by`            | `createdBy`       | `created_by VARCHAR(20) NOT NULL REFERENCES members(member_number)` | Officer member number from JWT `sub`. |
+| Created at    | `created_at`            | `createdAt`       | `created_at TIMESTAMPTZ NOT NULL` | Set on POST. |
+| Updated at    | `updated_at`            | `updatedAt`       | `updated_at TIMESTAMPTZ NOT NULL` | Bumped on every PUT. |
+
+**Invariants enforced today (application layer)**
+ - Maximum of 3 events per day. `POST /events` returns HTTP 409 when the day is full; `PUT /events/{id}` returns 409 when the target day is full and the event is being moved into it.
+ - Write endpoints require an officer JWT (`_require_officer`). Read endpoint is public.
+
+**Indexes** (for the future SQL table): `idx_events_day` accelerates the `?month=YYYY-MM` filter on `GET /events`; `idx_events_created_by` supports per-officer queries that the audit/admin views may need later.

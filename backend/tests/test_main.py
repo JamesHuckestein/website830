@@ -406,3 +406,319 @@ def test_export_csv_contains_member_data():
     r = client.get("/members/export-csv", headers=_officer_auth())
     assert "Huckestein" in r.text
     assert "Akers" in r.text
+
+
+# ---------------------------------------------------------------------------
+# Events (calendar)
+# ---------------------------------------------------------------------------
+
+def _event_payload(**overrides) -> dict:
+    base = {
+        "day": "2026-05-13",
+        "title": "Test Event",
+        "description": "A test event.",
+        "timeOfDay": "19:00",
+        "location": "Parish Hall",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_get_events_no_auth_required():
+    r = client.get("/events")
+    assert r.status_code == 200
+    items = r.json()
+    assert len(items) == 3
+    keys = {"id", "day", "title", "description", "timeOfDay", "location", "createdBy", "createdAt", "updatedAt"}
+    assert set(items[0].keys()) == keys
+
+
+def test_get_events_filter_by_month():
+    r = client.get("/events?month=2026-05")
+    assert r.status_code == 200
+    assert len(r.json()) == 3
+    r2 = client.get("/events?month=2026-04")
+    assert r2.status_code == 200
+    assert r2.json() == []
+
+
+def test_get_events_invalid_month_format():
+    r = client.get("/events?month=2026/05")
+    assert r.status_code == 400
+
+
+def test_create_event_officer_succeeds():
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload())
+    assert r.status_code == 200
+    body = r.json()
+    assert body["success"] is True
+    assert "id" in body
+    listing = client.get("/events").json()
+    assert any(e["title"] == "Test Event" for e in listing)
+
+
+def test_create_event_non_officer_forbidden():
+    r = client.post("/events", headers=_non_officer_auth(), json=_event_payload())
+    assert r.status_code == 403
+
+
+def test_create_event_requires_auth():
+    r = client.post("/events", json=_event_payload())
+    assert r.status_code in (401, 403)
+
+
+def test_create_event_rejects_invalid_day_format():
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(day="May 13 2026"))
+    assert r.status_code == 422
+
+
+def test_create_event_rejects_invalid_time_format():
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(timeOfDay="7pm"))
+    assert r.status_code == 422
+
+
+def test_create_event_rejects_nonexistent_calendar_date():
+    """B2: regex shape passes but Feb 30 isn't a real date."""
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(day="2026-02-30"))
+    assert r.status_code == 422
+
+
+def test_create_event_rejects_month_13():
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(day="2026-13-01"))
+    assert r.status_code == 422
+
+
+def test_create_event_rejects_hour_out_of_range():
+    """B2: regex shape passes but 25:00 is not a valid time."""
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(timeOfDay="25:00"))
+    assert r.status_code == 422
+
+
+def test_create_event_rejects_minute_out_of_range():
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(timeOfDay="12:99"))
+    assert r.status_code == 422
+
+
+def test_update_event_rejects_nonexistent_calendar_date():
+    target_id = "c3d4e5f6-0001-0000-0000-000000000001"
+    r = client.put(
+        f"/events/{target_id}",
+        headers=_officer_auth(),
+        json=_event_payload(day="2026-02-30"),
+    )
+    assert r.status_code == 422
+
+
+def test_update_event_rejects_invalid_time():
+    target_id = "c3d4e5f6-0001-0000-0000-000000000001"
+    r = client.put(
+        f"/events/{target_id}",
+        headers=_officer_auth(),
+        json=_event_payload(timeOfDay="24:00"),
+    )
+    assert r.status_code == 422
+
+
+def test_create_event_rejects_title_too_long():
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(title="x" * 201))
+    assert r.status_code == 422
+
+
+def test_create_event_rejects_description_too_long():
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(description="x" * 2001))
+    assert r.status_code == 422
+
+
+def test_create_event_rejects_location_too_long():
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(location="x" * 201))
+    assert r.status_code == 422
+
+
+def test_create_event_blocks_fourth_event_on_same_day():
+    # Day starts empty (no seed events on 2026-05-13). Add three OK, then 4th must 409.
+    for i in range(3):
+        r = client.post("/events", headers=_officer_auth(), json=_event_payload(title=f"Event {i}"))
+        assert r.status_code == 200
+    r4 = client.post("/events", headers=_officer_auth(), json=_event_payload(title="Fourth"))
+    assert r4.status_code == 409
+
+
+def test_update_event_officer_succeeds():
+    target_id = "c3d4e5f6-0001-0000-0000-000000000001"
+    r = client.put(
+        f"/events/{target_id}",
+        headers=_officer_auth(),
+        json=_event_payload(day="2026-05-06", title="Updated Title", description="Updated."),
+    )
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    listing = client.get("/events").json()
+    found = next(e for e in listing if e["id"] == target_id)
+    assert found["title"] == "Updated Title"
+    assert found["description"] == "Updated."
+
+
+def test_update_event_non_officer_forbidden():
+    target_id = "c3d4e5f6-0001-0000-0000-000000000001"
+    r = client.put(f"/events/{target_id}", headers=_non_officer_auth(), json=_event_payload())
+    assert r.status_code == 403
+
+
+def test_update_event_not_found():
+    r = client.put("/events/no-such-id", headers=_officer_auth(), json=_event_payload())
+    assert r.status_code == 404
+
+
+def test_update_event_to_full_day_returns_409():
+    # Fill 2026-05-13 with 3 events, then try to move the seed event from 2026-05-06 onto it.
+    for i in range(3):
+        client.post("/events", headers=_officer_auth(), json=_event_payload(title=f"Filler {i}"))
+    seed_id = "c3d4e5f6-0001-0000-0000-000000000001"
+    r = client.put(
+        f"/events/{seed_id}",
+        headers=_officer_auth(),
+        json=_event_payload(day="2026-05-13", title="Bumped"),
+    )
+    assert r.status_code == 409
+
+
+def test_delete_event_officer_succeeds():
+    target_id = "c3d4e5f6-0002-0000-0000-000000000002"
+    r = client.delete(f"/events/{target_id}", headers=_officer_auth())
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    listing = client.get("/events").json()
+    assert all(e["id"] != target_id for e in listing)
+
+
+def test_delete_event_non_officer_forbidden():
+    target_id = "c3d4e5f6-0002-0000-0000-000000000002"
+    r = client.delete(f"/events/{target_id}", headers=_non_officer_auth())
+    assert r.status_code == 403
+
+
+def test_delete_event_not_found():
+    r = client.delete("/events/no-such-id", headers=_officer_auth())
+    assert r.status_code == 404
+
+
+def test_update_event_requires_auth():
+    r = client.put("/events/c3d4e5f6-0001-0000-0000-000000000001", json=_event_payload())
+    assert r.status_code in (401, 403)
+
+
+def test_delete_event_requires_auth():
+    r = client.delete("/events/c3d4e5f6-0001-0000-0000-000000000001")
+    assert r.status_code in (401, 403)
+
+
+def test_event_full_lifecycle():
+    """POST → GET → PUT → GET → DELETE → GET against the live in-memory store."""
+    # Seed has 3 events
+    assert len(client.get("/events").json()) == 3
+
+    # Create
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(title="LC1"))
+    assert r.status_code == 200
+    new_id = r.json()["id"]
+
+    # GET sees the new one
+    listing = client.get("/events").json()
+    assert len(listing) == 4
+    new_record = next(e for e in listing if e["id"] == new_id)
+    assert new_record["title"] == "LC1"
+    assert new_record["createdBy"] == "8301002"
+    assert new_record["createdAt"] == new_record["updatedAt"]
+
+    # Update
+    r2 = client.put(
+        f"/events/{new_id}",
+        headers=_officer_auth(),
+        json=_event_payload(title="LC2", description="Updated body."),
+    )
+    assert r2.status_code == 200
+
+    # GET sees the update
+    listing2 = client.get("/events").json()
+    updated = next(e for e in listing2 if e["id"] == new_id)
+    assert updated["title"] == "LC2"
+    assert updated["description"] == "Updated body."
+
+    # Delete
+    r3 = client.delete(f"/events/{new_id}", headers=_officer_auth())
+    assert r3.status_code == 200
+
+    # GET no longer contains
+    listing3 = client.get("/events").json()
+    assert all(e["id"] != new_id for e in listing3)
+    assert len(listing3) == 3
+
+
+def test_create_event_populates_audit_fields_from_jwt_and_today(monkeypatch):
+    from datetime import date as date_cls
+
+    from app import main
+
+    monkeypatch.setattr(main, "_today", lambda: date_cls(2026, 5, 1))
+    r = client.post("/events", headers=_officer_auth(), json=_event_payload(title="Audit"))
+    assert r.status_code == 200
+    new_id = r.json()["id"]
+    record = next(e for e in client.get("/events").json() if e["id"] == new_id)
+    assert record["createdBy"] == "8301002"
+    assert record["createdAt"] == "2026-05-01T00:00:00Z"
+    assert record["updatedAt"] == "2026-05-01T00:00:00Z"
+
+
+def test_update_event_bumps_updated_at_but_not_created_at(monkeypatch):
+    from datetime import date as date_cls
+
+    from app import main
+
+    monkeypatch.setattr(main, "_today", lambda: date_cls(2026, 5, 1))
+    new_id = client.post("/events", headers=_officer_auth(), json=_event_payload(title="A")).json()["id"]
+
+    monkeypatch.setattr(main, "_today", lambda: date_cls(2026, 5, 15))
+    client.put(
+        f"/events/{new_id}",
+        headers=_officer_auth(),
+        json=_event_payload(title="B"),
+    )
+
+    after = next(e for e in client.get("/events").json() if e["id"] == new_id)
+    assert after["createdAt"] == "2026-05-01T00:00:00Z"
+    assert after["updatedAt"] == "2026-05-15T00:00:00Z"
+
+
+def test_create_event_max_3_under_concurrency(monkeypatch):
+    """Regression for B1: even with a deliberately slow append (widening the
+    check-and-insert window) and concurrent requests, the lock guarantees the
+    max-3 invariant. Removing `_events_lock` from create_event should make this
+    test fail."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app import main as _main
+    from app.seed import events_store as _orig_store
+
+    class SlowAppendStore(list):
+        def append(self, item):  # type: ignore[override]
+            time.sleep(0.05)
+            list.append(self, item)
+
+    slow = SlowAppendStore(_orig_store)
+    monkeypatch.setattr(_main, "events_store", slow)
+
+    headers = _officer_auth()
+    payload = _event_payload(day="2026-05-25")  # empty day in seed
+
+    def fire():
+        return client.post("/events", headers=headers, json=payload)
+
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        results = [f.result() for f in [ex.submit(fire) for _ in range(5)]]
+
+    statuses = [r.status_code for r in results]
+    on_day = sum(1 for e in slow if e["day"] == "2026-05-25")
+    assert on_day == 3, f"max-3 invariant violated; got {on_day} events, statuses={statuses}"
+    assert statuses.count(200) == 3, statuses
+    assert statuses.count(409) == 2, statuses

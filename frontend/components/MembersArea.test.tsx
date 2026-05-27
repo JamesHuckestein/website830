@@ -28,4 +28,21 @@ describe("MembersArea", () => {
     fireEvent.click(screen.getByRole("button", { name: "Logout" }));
     expect(onLogout).toHaveBeenCalled();
   });
+
+  it("hides the Calendar Updates link for non-officers", () => {
+    render(<MembersArea isOfficer={false} onSelect={vi.fn()} onLogout={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Calendar Updates" })).toBeNull();
+  });
+
+  it("shows the Calendar Updates link for officers", () => {
+    render(<MembersArea isOfficer={true} onSelect={vi.fn()} onLogout={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Calendar Updates" })).toBeInTheDocument();
+  });
+
+  it("dispatches calendarUpdates when the officer link is clicked", () => {
+    const onSelect = vi.fn();
+    render(<MembersArea isOfficer={true} onSelect={onSelect} onLogout={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Calendar Updates" }));
+    expect(onSelect).toHaveBeenCalledWith("calendarUpdates");
+  });
 });

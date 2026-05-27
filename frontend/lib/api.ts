@@ -46,6 +46,18 @@ export type MeetingMinutesDetail = {
   url: string;
 };
 
+export type Event = {
+  id: string;
+  day: string;
+  title: string;
+  description: string;
+  timeOfDay: string | null;
+  location: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 async function apiFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -55,7 +67,16 @@ async function apiFetch<T>(path: string, token: string, init?: RequestInit): Pro
       ...(init?.headers ?? {}),
     },
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // non-JSON error body — fall through to generic message
+    }
+    throw new Error(detail || `API ${res.status}: ${path}`);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -121,6 +142,51 @@ export async function getPublicPrayerRequests(): Promise<PublicPrayerRequest[]> 
   const res = await fetch(`${API_BASE}/prayer-requests/public`);
   if (!res.ok) throw new Error(`API ${res.status}: /prayer-requests/public`);
   return res.json() as Promise<PublicPrayerRequest[]>;
+}
+
+export async function getEvents(month?: string): Promise<Event[]> {
+  const url = month ? `${API_BASE}/events?month=${month}` : `${API_BASE}/events`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`API ${res.status}: /events`);
+  return res.json() as Promise<Event[]>;
+}
+
+export type EventWriteBody = {
+  day: string;
+  title: string;
+  description: string;
+  timeOfDay: string | null;
+  location: string | null;
+};
+
+export async function createEvent(
+  token: string,
+  body: EventWriteBody,
+): Promise<{ success: boolean; message: string; id: string }> {
+  return apiFetch<{ success: boolean; message: string; id: string }>("/events", token, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateEvent(
+  token: string,
+  id: string,
+  body: EventWriteBody,
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/events/${id}`, token, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteEvent(
+  token: string,
+  id: string,
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/events/${id}`, token, {
+    method: "DELETE",
+  });
 }
 
 export async function getMeetingMinutes(token: string): Promise<MeetingMinutesSummary[]> {

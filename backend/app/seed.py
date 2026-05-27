@@ -11,6 +11,7 @@ with open(_SCHEMA_PATH) as _f:
 members_store: list[dict] = copy.deepcopy(_ORIGINAL["members"])
 prayer_requests_store: list[dict] = copy.deepcopy(_ORIGINAL["prayer_requests"])
 meeting_minutes_store: list[dict] = copy.deepcopy(_ORIGINAL["meeting_minutes"])
+events_store: list[dict] = copy.deepcopy(_ORIGINAL["events"])
 
 
 def reset_to_seed() -> None:
@@ -21,3 +22,5 @@ def reset_to_seed() -> None:
     prayer_requests_store.extend(copy.deepcopy(_ORIGINAL["prayer_requests"]))
     meeting_minutes_store.clear()
     meeting_minutes_store.extend(copy.deepcopy(_ORIGINAL["meeting_minutes"]))
+    events_store.clear()
+    events_store.extend(copy.deepcopy(_ORIGINAL["events"]))

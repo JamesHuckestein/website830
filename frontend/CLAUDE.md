@@ -35,11 +35,14 @@ Calendar         — public, renders for activeSection === "events"
                    month state + prev/next arrows; fetches via getEvents(month);
                    uses CalendarGrid; opens EventDetailModal on event-title click
 CalendarUpdates  — officer-only members sub-section (memberSubSection === "calendarUpdates")
-                   reuses CalendarGrid with selectedDay state; renders Add/Edit/Delete buttons;
-                   opens EventFormModal / DayEventPicker / ConfirmDialog as needed
+                   props: { token, onBack }; reuses CalendarGrid with selectedDay state;
+                   renders Add/Edit/Delete buttons; calls createEvent/updateEvent/deleteEvent
+                   on the backend; opens EventFormModal / DayEventPicker / ConfirmDialog as needed
 CalendarGrid     — shared, presentational: 7-column Mon→Sun grid; props
-                   { year, month, events, selectedDay?, onDayClick? }; blank leading/trailing
-                   cells outside the visible month; up to 3 event-title links per day cell
+                   { year, month, events, selectedDay?, onDayClick?, onEventClick? };
+                   onDayClick wins if both are supplied (day cell becomes the button and event
+                   titles render as text); blank leading/trailing cells outside the visible
+                   month; up to 3 event-title links per day cell
 EventDetailModal — public read-only popover: title, description, time (12-hour), location, Close
 EventFormModal   — officer form: Title (required), Description (required),
                    Time (optional <input type="time">), Location (optional); Save / Cancel

@@ -6,7 +6,7 @@ type MembersAreaProps = {
   onLogout: () => void;
 };
 
-const links: { id: MemberSubSection; label: string }[] = [
+const baseLinks: { id: MemberSubSection; label: string }[] = [
   { id: "contactInfo",     label: "Contact Information" },
   { id: "birthdays",       label: "Birthdays" },
   { id: "prayerRequests",  label: "Prayer Requests" },
@@ -16,7 +16,13 @@ const links: { id: MemberSubSection; label: string }[] = [
   { id: "meetingMinutes",  label: "Meeting Minutes" },
 ];
 
-export function MembersArea({ isOfficer: _isOfficer, onSelect, onLogout }: MembersAreaProps) {
+const officerOnlyLink: { id: MemberSubSection; label: string } = {
+  id: "calendarUpdates",
+  label: "Calendar Updates",
+};
+
+export function MembersArea({ isOfficer, onSelect, onLogout }: MembersAreaProps) {
+  const links = isOfficer ? [...baseLinks, officerOnlyLink] : baseLinks;
   return (
     <section className="space-y-6">
       <h2 className="text-2xl font-semibold text-[#032147]">Members Area</h2>

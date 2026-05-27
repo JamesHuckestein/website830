@@ -2,8 +2,9 @@ import csv
 import io
 import logging
 import os
+import threading
 import uuid
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 import httpx
 import jwt
@@ -11,9 +12,9 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from app.seed import meeting_minutes_store, members_store, prayer_requests_store
+from app.seed import events_store, meeting_minutes_store, members_store, prayer_requests_store
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,48 @@ class NominationRequest(BaseModel):
     knightOfMonth: str
     familyOfMonth: str
 
+class _EventBody(BaseModel):
+    """Shared request shape for POST /events and PUT /events/{id}.
+
+    The Field `pattern` arguments guard shape; the @field_validator hooks below
+    add semantic checks (real calendar date, valid 24-hour time) that the regex
+    alone cannot enforce — e.g. "2026-02-30" or "25:99" pass the regex but are
+    rejected here with HTTP 422.
+    """
+    day: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=2000)
+    timeOfDay: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    location: str | None = Field(default=None, max_length=200)
+
+    @field_validator("day")
+    @classmethod
+    def _validate_day(cls, v: str) -> str:
+        try:
+            date.fromisoformat(v)
+        except ValueError as e:
+            raise ValueError("day must be a real calendar date in YYYY-MM-DD format") from e
+        return v
+
+    @field_validator("timeOfDay")
+    @classmethod
+    def _validate_time(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        try:
+            time.fromisoformat(v)
+        except ValueError as e:
+            raise ValueError("timeOfDay must be a valid HH:MM 24-hour time") from e
+        return v
+
+
+class EventCreate(_EventBody):
+    pass
+
+
+class EventUpdate(_EventBody):
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -90,6 +133,22 @@ def _require_officer(payload: dict = Depends(_require_auth)) -> dict:
 
 def _is_officer(officer_position: str | None) -> bool:
     return officer_position in OFFICER_TITLES
+
+
+def _today() -> date:
+    return date.today()
+
+
+def _now_iso() -> str:
+    return _today().isoformat() + "T00:00:00Z"
+
+
+# Serializes read-modify-write sequences against `events_store`. Sync routes run
+# in FastAPI's threadpool, so two concurrent POSTs targeting the same day could
+# otherwise each see "2 events" before either appends, producing 4. Required
+# while the store is in-memory; the production SQL migration should rely on a
+# transaction (or BEFORE-INSERT trigger) for the same invariant.
+_events_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +182,20 @@ def _prayer_request_to_response(r: dict) -> dict:
         "text": r.get("text", ""),
         "submittedBy": r["submitted_by"],
         "submittedAt": r["submitted_at"],
+    }
+
+
+def _event_to_response(e: dict) -> dict:
+    return {
+        "id": e["id"],
+        "day": e["day"],
+        "title": e["title"],
+        "description": e["description"],
+        "timeOfDay": e.get("time_of_day"),
+        "location": e.get("location"),
+        "createdBy": e["created_by"],
+        "createdAt": e["created_at"],
+        "updatedAt": e["updated_at"],
     }
 
 
@@ -280,6 +353,76 @@ def get_meeting_minutes_detail(minutes_id: str, _payload: dict = Depends(_requir
         raise HTTPException(status_code=404, detail="Meeting minutes not found")
     logger.info("S3 stub: would generate pre-signed URL for %s", entry["s3_key"])
     return {"id": entry["id"], "title": entry["title"], "meetingDate": entry["meeting_date"], "url": entry["s3_key"]}
+
+
+@app.get("/events")
+def get_events(month: str | None = None):
+    """List events.
+
+    Without arguments, returns all events. With ``?month=YYYY-MM``, returns only
+    events whose ``day`` (a ``YYYY-MM-DD`` string) starts with that prefix —
+    i.e. events that fall in that calendar month. Other ``month`` formats raise
+    HTTP 400.
+    """
+    if month is not None:
+        if len(month) != 7 or month[4] != "-":
+            raise HTTPException(status_code=400, detail="month must be in YYYY-MM format")
+        filtered = [e for e in events_store if e["day"].startswith(month)]
+    else:
+        filtered = list(events_store)
+    return [_event_to_response(e) for e in filtered]
+
+
+@app.post("/events")
+def create_event(body: EventCreate, payload: dict = Depends(_require_officer)):
+    new_id = str(uuid.uuid4())
+    now = _now_iso()
+    with _events_lock:
+        same_day_count = sum(1 for e in events_store if e["day"] == body.day)
+        if same_day_count >= 3:
+            raise HTTPException(status_code=409, detail="This day already has the maximum of 3 events.")
+        record = {
+            "id": new_id,
+            "day": body.day,
+            "title": body.title,
+            "description": body.description,
+            "time_of_day": body.timeOfDay,
+            "location": body.location,
+            "created_by": payload["sub"],
+            "created_at": now,
+            "updated_at": now,
+        }
+        events_store.append(record)
+    return {"success": True, "message": "Event created.", "id": new_id}
+
+
+@app.put("/events/{event_id}")
+def update_event(event_id: str, body: EventUpdate, payload: dict = Depends(_require_officer)):
+    with _events_lock:
+        record = next((e for e in events_store if e["id"] == event_id), None)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Event not found.")
+        if body.day != record["day"]:
+            same_day_count = sum(1 for e in events_store if e["day"] == body.day and e["id"] != event_id)
+            if same_day_count >= 3:
+                raise HTTPException(status_code=409, detail="Target day already has the maximum of 3 events.")
+        record["day"] = body.day
+        record["title"] = body.title
+        record["description"] = body.description
+        record["time_of_day"] = body.timeOfDay
+        record["location"] = body.location
+        record["updated_at"] = _now_iso()
+    return {"success": True, "message": "Event updated."}
+
+
+@app.delete("/events/{event_id}")
+def delete_event(event_id: str, _payload: dict = Depends(_require_officer)):
+    with _events_lock:
+        for i, e in enumerate(events_store):
+            if e["id"] == event_id:
+                events_store.pop(i)
+                return {"success": True, "message": "Event deleted."}
+    raise HTTPException(status_code=404, detail="Event not found.")
 
 
 @app.post("/emails/officer")
