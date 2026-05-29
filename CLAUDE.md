@@ -9,6 +9,7 @@ frontend/    Next.js 16 app
 backend/     FastAPI app (in-memory stores seeded from docs/schema.json)
 docs/        PLAN.md — original phased roadmap (Parts 1-9)
              Calendar-Plan.md — Phase-2 roadmap for the interactive calendar feature
+             News-Plan.md / News-Plan2.md — Phase-2 roadmap for News & Announcements
 scripts/    start.sh / stop.sh dev orchestration (Mac-only)
 ```
 
@@ -43,6 +44,8 @@ The app is a single-page client-rendered Next.js app. `app/page.tsx` renders `<A
 `lib/auth.ts` has demo credentials for the members login (no backend yet).
 
 The `events` SectionId renders a live interactive `<Calendar />` (no longer a static `sectionContent` blurb); officers see an additional "Calendar Updates" entry inside the members area for Add/Edit/Delete of events. See `docs/Calendar-Plan.md` for the phased rollout.
+
+The `news` SectionId renders a live `<News />` (no longer a static `sectionContent` blurb): a vertical list of clickable announcement boxes that open a detail popup. Officers see an additional "Edit Announcements" entry in the members area for Add/Edit/Delete. Announcements auto-purge from public reads once their `deleteDate` is in the past. See `docs/News-Plan2.md` for the phased rollout.
 
 See `frontend/CLAUDE.md` for full component contracts, data shapes, and testing details.
 

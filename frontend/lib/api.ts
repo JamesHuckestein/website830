@@ -58,6 +58,16 @@ export type Event = {
   updatedAt: string;
 };
 
+export type Announcement = {
+  id: string;
+  title: string;
+  details: string;
+  deleteDate: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 async function apiFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -185,6 +195,48 @@ export async function deleteEvent(
   id: string,
 ): Promise<{ success: boolean; message: string }> {
   return apiFetch<{ success: boolean; message: string }>(`/events/${id}`, token, {
+    method: "DELETE",
+  });
+}
+
+export async function getAnnouncements(): Promise<Announcement[]> {
+  const res = await fetch(`${API_BASE}/announcements`);
+  if (!res.ok) throw new Error(`API ${res.status}: /announcements`);
+  return res.json() as Promise<Announcement[]>;
+}
+
+export type AnnouncementWriteBody = {
+  title: string;
+  details: string;
+  deleteDate: string;
+};
+
+export async function createAnnouncement(
+  token: string,
+  body: AnnouncementWriteBody,
+): Promise<{ success: boolean; message: string; id: string }> {
+  return apiFetch<{ success: boolean; message: string; id: string }>("/announcements", token, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateAnnouncement(
+  token: string,
+  id: string,
+  body: AnnouncementWriteBody,
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/announcements/${id}`, token, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteAnnouncement(
+  token: string,
+  id: string,
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/announcements/${id}`, token, {
     method: "DELETE",
   });
 }

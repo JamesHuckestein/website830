@@ -1,5 +1,6 @@
 import Image from "next/image";
 
+import { AnnouncementsUpdate } from "@/components/AnnouncementsUpdate";
 import { BirthdayList } from "@/components/BirthdayList";
 import { Calendar } from "@/components/Calendar";
 import { CalendarUpdates } from "@/components/CalendarUpdates";
@@ -9,6 +10,7 @@ import { MeetingMinutes } from "@/components/MeetingMinutes";
 import { MemberList } from "@/components/MemberList";
 import { MembersArea } from "@/components/MembersArea";
 import { MembersLoginForm } from "@/components/MembersLoginForm";
+import { News } from "@/components/News";
 import { NominationForm } from "@/components/NominationForm";
 import { OfficerContacts } from "@/components/OfficerContacts";
 import { PrayerRequests } from "@/components/PrayerRequests";
@@ -133,6 +135,9 @@ export function MainPanel({
     if (memberSubSection === "calendarUpdates" && isOfficer) {
       return <CalendarUpdates token={token!} onBack={onBackToMembersArea} />;
     }
+    if (memberSubSection === "announcementsUpdate" && isOfficer) {
+      return <AnnouncementsUpdate token={token!} onBack={onBackToMembersArea} />;
+    }
 
     return (
       <MembersArea
@@ -229,6 +234,10 @@ export function MainPanel({
 
   if (activeSection === "events") {
     return <Calendar />;
+  }
+
+  if (activeSection === "news") {
+    return <News />;
   }
 
   const content = sectionContent[activeSection];

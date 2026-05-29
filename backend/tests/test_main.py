@@ -722,3 +722,343 @@ def test_create_event_max_3_under_concurrency(monkeypatch):
     assert on_day == 3, f"max-3 invariant violated; got {on_day} events, statuses={statuses}"
     assert statuses.count(200) == 3, statuses
     assert statuses.count(409) == 2, statuses
+
+
+# ---------------------------------------------------------------------------
+# Announcements (news)
+# ---------------------------------------------------------------------------
+
+def _announcement_payload(**overrides) -> dict:
+    base = {
+        "deleteDate": "2026-12-31",
+        "title": "Test Announcement",
+        "details": "A test announcement.",
+    }
+    base.update(overrides)
+    return base
+
+
+def _patch_today(monkeypatch, y: int, m: int, d: int) -> None:
+    from datetime import date as _date
+
+    from app import main as _main
+
+    monkeypatch.setattr(_main, "_today", lambda: _date(y, m, d))
+
+
+def test_get_announcements_no_auth_required():
+    r = client.get("/announcements")
+    assert r.status_code == 200
+
+
+def test_get_announcements_returns_seed_camelcase_shape(monkeypatch):
+    # Pin _today before the seed's earliest delete_date so all 3 are visible
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.get("/announcements")
+    items = r.json()
+    assert len(items) == 3
+    keys = {"id", "title", "details", "deleteDate", "createdBy", "createdAt", "updatedAt"}
+    assert set(items[0].keys()) == keys
+
+
+def test_get_announcements_sorted_newest_first(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    items = client.get("/announcements").json()
+    titles = [a["title"] for a in items]
+    # Seed created_at order: 0003 (May 20) > 0002 (May 10) > 0001 (May 1)
+    assert titles == [
+        "New Member Welcome Reception",
+        "Volunteer Sign-Up for Parish Festival",
+        "Spring Charity Dinner",
+    ]
+
+
+def test_get_announcements_filters_expired_by_today(monkeypatch):
+    # Seed 0001 has delete_date 2026-05-31. Pinning today to 2026-06-01 should drop it.
+    _patch_today(monkeypatch, 2026, 6, 1)
+    items = client.get("/announcements").json()
+    assert len(items) == 2
+    assert all(a["title"] != "Spring Charity Dinner" for a in items)
+
+
+def test_get_announcements_boundary_delete_date_today_is_visible(monkeypatch):
+    # delete_date == today → still visible
+    _patch_today(monkeypatch, 2026, 5, 31)
+    items = client.get("/announcements").json()
+    assert any(a["title"] == "Spring Charity Dinner" for a in items)
+
+
+def test_create_announcement_officer_succeeds(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.post("/announcements", headers=_officer_auth(), json=_announcement_payload())
+    assert r.status_code == 200
+    body = r.json()
+    assert body["success"] is True
+    assert "id" in body
+    listing = client.get("/announcements").json()
+    assert any(a["title"] == "Test Announcement" for a in listing)
+
+
+def test_create_announcement_non_officer_forbidden(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.post("/announcements", headers=_non_officer_auth(), json=_announcement_payload())
+    assert r.status_code == 403
+
+
+def test_create_announcement_requires_auth(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.post("/announcements", json=_announcement_payload())
+    assert r.status_code in (401, 403)
+
+
+def test_create_announcement_rejects_invalid_date_format(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.post("/announcements", headers=_officer_auth(), json=_announcement_payload(deleteDate="June 1 2026"))
+    assert r.status_code == 422
+
+
+def test_create_announcement_rejects_nonexistent_calendar_date(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.post("/announcements", headers=_officer_auth(), json=_announcement_payload(deleteDate="2026-02-30"))
+    assert r.status_code == 422
+
+
+def test_create_announcement_rejects_past_delete_date(monkeypatch):
+    _patch_today(monkeypatch, 2026, 6, 1)
+    r = client.post("/announcements", headers=_officer_auth(), json=_announcement_payload(deleteDate="2026-05-31"))
+    assert r.status_code == 422
+
+
+def test_create_announcement_accepts_today_as_delete_date(monkeypatch):
+    _patch_today(monkeypatch, 2026, 6, 1)
+    r = client.post("/announcements", headers=_officer_auth(), json=_announcement_payload(deleteDate="2026-06-01"))
+    assert r.status_code == 200
+
+
+def test_create_announcement_rejects_title_too_long(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.post("/announcements", headers=_officer_auth(), json=_announcement_payload(title="x" * 201))
+    assert r.status_code == 422
+
+
+def test_create_announcement_rejects_details_too_long(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.post("/announcements", headers=_officer_auth(), json=_announcement_payload(details="x" * 2001))
+    assert r.status_code == 422
+
+
+def test_create_announcement_rejects_empty_title(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.post("/announcements", headers=_officer_auth(), json=_announcement_payload(title=""))
+    assert r.status_code == 422
+
+
+def test_create_announcement_rejects_empty_details(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.post("/announcements", headers=_officer_auth(), json=_announcement_payload(details=""))
+    assert r.status_code == 422
+
+
+def test_update_announcement_officer_succeeds(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    target_id = "d4e5f6a7-0001-0000-0000-000000000001"
+    r = client.put(
+        f"/announcements/{target_id}",
+        headers=_officer_auth(),
+        json=_announcement_payload(title="Updated", details="Updated details.", deleteDate="2026-08-01"),
+    )
+    assert r.status_code == 200
+    listing = client.get("/announcements").json()
+    found = next(a for a in listing if a["id"] == target_id)
+    assert found["title"] == "Updated"
+    assert found["details"] == "Updated details."
+    assert found["deleteDate"] == "2026-08-01"
+
+
+def test_update_announcement_non_officer_forbidden(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    target_id = "d4e5f6a7-0001-0000-0000-000000000001"
+    r = client.put(f"/announcements/{target_id}", headers=_non_officer_auth(), json=_announcement_payload())
+    assert r.status_code == 403
+
+
+def test_update_announcement_requires_auth(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    target_id = "d4e5f6a7-0001-0000-0000-000000000001"
+    r = client.put(f"/announcements/{target_id}", json=_announcement_payload())
+    assert r.status_code in (401, 403)
+
+
+def test_update_announcement_not_found(monkeypatch):
+    _patch_today(monkeypatch, 2026, 5, 1)
+    r = client.put("/announcements/no-such-id", headers=_officer_auth(), json=_announcement_payload())
+    assert r.status_code == 404
+
+
+def test_update_announcement_rejects_past_delete_date(monkeypatch):
+    _patch_today(monkeypatch, 2026, 6, 1)
+    target_id = "d4e5f6a7-0002-0000-0000-000000000002"
+    r = client.put(
+        f"/announcements/{target_id}",
+        headers=_officer_auth(),
+        json=_announcement_payload(deleteDate="2026-05-31"),
+    )
+    assert r.status_code == 422
+
+
+def test_delete_announcement_officer_succeeds():
+    target_id = "d4e5f6a7-0002-0000-0000-000000000002"
+    r = client.delete(f"/announcements/{target_id}", headers=_officer_auth())
+    assert r.status_code == 200
+    listing = client.get("/announcements").json()
+    assert all(a["id"] != target_id for a in listing)
+
+
+def test_delete_announcement_non_officer_forbidden():
+    target_id = "d4e5f6a7-0002-0000-0000-000000000002"
+    r = client.delete(f"/announcements/{target_id}", headers=_non_officer_auth())
+    assert r.status_code == 403
+
+
+def test_delete_announcement_not_found():
+    r = client.delete("/announcements/no-such-id", headers=_officer_auth())
+    assert r.status_code == 404
+
+
+def test_delete_announcement_requires_auth():
+    target_id = "d4e5f6a7-0002-0000-0000-000000000002"
+    r = client.delete(f"/announcements/{target_id}")
+    assert r.status_code in (401, 403)
+
+
+def test_announcements_concurrent_post_no_lost_writes(monkeypatch):
+    """Mirrors the events concurrency test: 5 concurrent POSTs all succeed with
+    unique ids and the store ends up with the expected count. Demonstrates the
+    lock prevents lost appends under the slow-append shim."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app import main as _main
+    from app.seed import announcements_store as _orig_store
+
+    _patch_today(monkeypatch, 2026, 5, 1)
+
+    class SlowAppendStore(list):
+        def append(self, item):  # type: ignore[override]
+            time.sleep(0.05)
+            list.append(self, item)
+
+    slow = SlowAppendStore(_orig_store)
+    monkeypatch.setattr(_main, "announcements_store", slow)
+
+    headers = _officer_auth()
+    payload = _announcement_payload()
+
+    def fire():
+        return client.post("/announcements", headers=headers, json=payload)
+
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        results = [f.result() for f in [ex.submit(fire) for _ in range(5)]]
+
+    statuses = [r.status_code for r in results]
+    new_ids = {r.json()["id"] for r in results if r.status_code == 200}
+    assert statuses.count(200) == 5, statuses
+    assert len(new_ids) == 5, "expected 5 distinct ids"
+    # Seed had 3 + 5 newly created = 8
+    assert len(slow) == 8
+
+
+def test_announcement_full_lifecycle(monkeypatch):
+    """POST → GET → PUT → GET → DELETE → GET against the live in-memory store."""
+    _patch_today(monkeypatch, 2026, 5, 1)
+
+    # Seed has 3 active announcements
+    assert len(client.get("/announcements").json()) == 3
+
+    # Create
+    r = client.post(
+        "/announcements",
+        headers=_officer_auth(),
+        json=_announcement_payload(title="LC1", deleteDate="2026-09-01"),
+    )
+    assert r.status_code == 200
+    new_id = r.json()["id"]
+
+    # GET sees the new one (and it sorts to the top since it's newest)
+    listing = client.get("/announcements").json()
+    assert len(listing) == 4
+    new_record = next(a for a in listing if a["id"] == new_id)
+    assert new_record["title"] == "LC1"
+    assert new_record["deleteDate"] == "2026-09-01"
+    assert new_record["createdBy"] == "8301002"
+    assert new_record["createdAt"] == new_record["updatedAt"]
+
+    # Update
+    r2 = client.put(
+        f"/announcements/{new_id}",
+        headers=_officer_auth(),
+        json=_announcement_payload(title="LC2", details="Updated body.", deleteDate="2026-10-15"),
+    )
+    assert r2.status_code == 200
+
+    # GET sees the update
+    listing2 = client.get("/announcements").json()
+    updated = next(a for a in listing2 if a["id"] == new_id)
+    assert updated["title"] == "LC2"
+    assert updated["details"] == "Updated body."
+    assert updated["deleteDate"] == "2026-10-15"
+
+    # Delete
+    r3 = client.delete(f"/announcements/{new_id}", headers=_officer_auth())
+    assert r3.status_code == 200
+
+    # GET no longer contains
+    listing3 = client.get("/announcements").json()
+    assert all(a["id"] != new_id for a in listing3)
+    assert len(listing3) == 3
+
+
+def test_create_announcement_populates_audit_fields_from_jwt_and_today(monkeypatch):
+    from datetime import date as date_cls
+
+    from app import main as _main
+
+    monkeypatch.setattr(_main, "_today", lambda: date_cls(2026, 5, 1))
+    r = client.post(
+        "/announcements",
+        headers=_officer_auth(),
+        json=_announcement_payload(title="Audit", deleteDate="2026-09-01"),
+    )
+    assert r.status_code == 200
+    new_id = r.json()["id"]
+    record = next(a for a in client.get("/announcements").json() if a["id"] == new_id)
+    assert record["createdBy"] == "8301002"
+    assert record["createdAt"] == "2026-05-01T00:00:00Z"
+    assert record["updatedAt"] == "2026-05-01T00:00:00Z"
+
+
+def test_update_announcement_preserves_created_by_and_created_at(monkeypatch):
+    from datetime import date as date_cls
+
+    from app import main as _main
+
+    monkeypatch.setattr(_main, "_today", lambda: date_cls(2026, 5, 1))
+    new_id = client.post(
+        "/announcements",
+        headers=_officer_auth(),
+        json=_announcement_payload(title="A", deleteDate="2026-09-01"),
+    ).json()["id"]
+
+    monkeypatch.setattr(_main, "_today", lambda: date_cls(2026, 5, 15))
+    # PUT as a different officer to ensure created_by isn't overwritten by the JWT sub
+    r = client.put(
+        f"/announcements/{new_id}",
+        headers=_auth("8301001", "faith830"),  # Deputy Grand Knight, also an officer
+        json=_announcement_payload(title="B", deleteDate="2026-10-15"),
+    )
+    assert r.status_code == 200
+
+    after = next(a for a in client.get("/announcements").json() if a["id"] == new_id)
+    assert after["createdBy"] == "8301002"  # original creator preserved
+    assert after["createdAt"] == "2026-05-01T00:00:00Z"  # original timestamp preserved
+    assert after["updatedAt"] == "2026-05-15T00:00:00Z"  # bumped to current _today

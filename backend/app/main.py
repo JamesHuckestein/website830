@@ -14,7 +14,13 @@ from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 
-from app.seed import events_store, meeting_minutes_store, members_store, prayer_requests_store
+from app.seed import (
+    announcements_store,
+    events_store,
+    meeting_minutes_store,
+    members_store,
+    prayer_requests_store,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +120,36 @@ class EventUpdate(_EventBody):
     pass
 
 
+class _AnnouncementBody(BaseModel):
+    """Shared request shape for POST /announcements and PUT /announcements/{id}.
+
+    `delete_date` must be a real calendar date >= today. Officers should use
+    DELETE to remove an announcement immediately rather than back-dating it.
+    """
+    deleteDate: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    title: str = Field(min_length=1, max_length=200)
+    details: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("deleteDate")
+    @classmethod
+    def _validate_delete_date(cls, v: str) -> str:
+        try:
+            parsed = date.fromisoformat(v)
+        except ValueError as e:
+            raise ValueError("deleteDate must be a real calendar date in YYYY-MM-DD format") from e
+        if parsed < _today():
+            raise ValueError("deleteDate cannot be in the past")
+        return v
+
+
+class AnnouncementCreate(_AnnouncementBody):
+    pass
+
+
+class AnnouncementUpdate(_AnnouncementBody):
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
@@ -149,6 +185,11 @@ def _now_iso() -> str:
 # while the store is in-memory; the production SQL migration should rely on a
 # transaction (or BEFORE-INSERT trigger) for the same invariant.
 _events_lock = threading.Lock()
+
+# Same protection for the announcements store. There is no count cap to enforce,
+# but the lock still guards PUT (lookup→modify) and DELETE (enumerate→pop)
+# against concurrent mutation that could lose updates or pop the wrong index.
+_announcements_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +237,18 @@ def _event_to_response(e: dict) -> dict:
         "createdBy": e["created_by"],
         "createdAt": e["created_at"],
         "updatedAt": e["updated_at"],
+    }
+
+
+def _announcement_to_response(a: dict) -> dict:
+    return {
+        "id": a["id"],
+        "title": a["title"],
+        "details": a["details"],
+        "deleteDate": a["delete_date"],
+        "createdBy": a["created_by"],
+        "createdAt": a["created_at"],
+        "updatedAt": a["updated_at"],
     }
 
 
@@ -423,6 +476,65 @@ def delete_event(event_id: str, _payload: dict = Depends(_require_officer)):
                 events_store.pop(i)
                 return {"success": True, "message": "Event deleted."}
     raise HTTPException(status_code=404, detail="Event not found.")
+
+
+@app.get("/announcements")
+def get_announcements():
+    """List active announcements.
+
+    Public (no auth). Returns announcements where ``delete_date >= today``,
+    sorted by ``created_at`` descending (newest first; id ascending as a
+    deterministic tiebreaker for identical timestamps).
+    """
+    today = _today()
+    visible = [a for a in announcements_store if date.fromisoformat(a["delete_date"]) >= today]
+    visible.sort(key=lambda a: (a["created_at"], a["id"]), reverse=True)
+    return [_announcement_to_response(a) for a in visible]
+
+
+@app.post("/announcements")
+def create_announcement(body: AnnouncementCreate, payload: dict = Depends(_require_officer)):
+    new_id = str(uuid.uuid4())
+    now = _now_iso()
+    with _announcements_lock:
+        record = {
+            "id": new_id,
+            "title": body.title,
+            "details": body.details,
+            "delete_date": body.deleteDate,
+            "created_by": payload["sub"],
+            "created_at": now,
+            "updated_at": now,
+        }
+        announcements_store.append(record)
+    return {"success": True, "message": "Announcement created.", "id": new_id}
+
+
+@app.put("/announcements/{announcement_id}")
+def update_announcement(
+    announcement_id: str,
+    body: AnnouncementUpdate,
+    _payload: dict = Depends(_require_officer),
+):
+    with _announcements_lock:
+        record = next((a for a in announcements_store if a["id"] == announcement_id), None)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Announcement not found.")
+        record["title"] = body.title
+        record["details"] = body.details
+        record["delete_date"] = body.deleteDate
+        record["updated_at"] = _now_iso()
+    return {"success": True, "message": "Announcement updated."}
+
+
+@app.delete("/announcements/{announcement_id}")
+def delete_announcement(announcement_id: str, _payload: dict = Depends(_require_officer)):
+    with _announcements_lock:
+        for i, a in enumerate(announcements_store):
+            if a["id"] == announcement_id:
+                announcements_store.pop(i)
+                return {"success": True, "message": "Announcement deleted."}
+    raise HTTPException(status_code=404, detail="Announcement not found.")
 
 
 @app.post("/emails/officer")

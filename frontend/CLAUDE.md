@@ -48,20 +48,36 @@ EventFormModal   — officer form: Title (required), Description (required),
                    Time (optional <input type="time">), Location (optional); Save / Cancel
 DayEventPicker   — small list modal used when Edit/Delete is invoked on a day with ≥2 events
 ConfirmDialog    — reused from prayer-requests work for the "Will you confirm?" delete prompt
+
+News                     — public, renders for activeSection === "news"
+                           fetches via getAnnouncements(); renders titles as a vertical list
+                           of clickable boxes; opens AnnouncementDetailModal on click;
+                           backend filters out rows where delete_date < today
+AnnouncementsUpdate      — officer-only members sub-section
+                           (memberSubSection === "announcementsUpdate")
+                           props: { token, onBack }; renders the same list with click-to-select
+                           highlight; Add/Edit/Delete buttons; calls createAnnouncement /
+                           updateAnnouncement / deleteAnnouncement on the backend; uses
+                           AnnouncementFormModal / ConfirmDialog / SubmitModal as needed
+AnnouncementDetailModal  — public read-only popover: title, details (whitespace-pre-line), Close
+AnnouncementFormModal    — officer form: Date to Delete (required <input type="date">),
+                           Title (required, ≤200), Announcement Details (required, ≤2000);
+                           Save / Cancel; `submitting` prop disables both and shows "Saving..."
 ```
 
 ## Data & Auth
 
 `data/siteData.ts` — single source of truth for all content:
-- Types: `SectionId` (union), `NavItem`, `Officer`, `MemberSubSection` (includes `"calendarUpdates"`)
+- Types: `SectionId` (union), `NavItem`, `Officer`, `MemberSubSection` (includes `"calendarUpdates"` and `"announcementsUpdate"`)
 - Exports: `councilInfo`, `aboutCouncilDetails`, `navItems`, `officers[]`, `sectionContent`
-- Note: the `events` SectionId is no longer in `sectionContent` — it renders `<Calendar />` directly from `MainPanel`.
+- Note: the `events` and `news` SectionIds are no longer in `sectionContent` — they render `<Calendar />` and `<News />` directly from `MainPanel`.
 
 `lib/api.ts` — typed API client:
 - Members: `loginMember`, `getMembers`, `getMember`, `updateMember`, `getBirthdays`, `exportMembersCSV`
 - Prayer requests: `getPrayerRequests`, `createPrayerRequest`, `deletePrayerRequest`, `getPublicPrayerRequests`
 - Meeting minutes: `getMeetingMinutes`, `getMeetingMinutesDetail`
 - Events (calendar): `getEvents(month?)`, `createEvent`, `updateEvent`, `deleteEvent` — write methods require an officer JWT; backend enforces the 3-events-per-day cap with HTTP 409 Conflict.
+- Announcements (news): `getAnnouncements()`, `createAnnouncement`, `updateAnnouncement`, `deleteAnnouncement` — `getAnnouncements` is public and pre-sorted newest-first; backend filters out rows where `delete_date < today`. Write methods require an officer JWT and reject past `delete_date` values with HTTP 422.
 
 `lib/auth.ts` — `authenticateMember(membershipNumber, passcode): boolean`
 - Demo credentials: `{ "8301001": "faith830", "8301002": "charity830" }`

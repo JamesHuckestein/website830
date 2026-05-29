@@ -12,6 +12,7 @@ const NON_OFFICER_TOKEN =
 vi.mock("@/lib/api", () => ({
   loginMember: vi.fn(),
   getEvents: vi.fn().mockResolvedValue([]),
+  getAnnouncements: vi.fn().mockResolvedValue([]),
 }));
 
 beforeEach(() => {
@@ -94,6 +95,45 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Calendar Updates" }));
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Calendar Updates" })).toBeInTheDocument();
+    });
+  });
+
+  it("hides Edit Announcements from a visitor (not logged in)", () => {
+    render(<AppShell />);
+    expect(screen.queryByRole("button", { name: "Edit Announcements" })).toBeNull();
+  });
+
+  it("shows Edit Announcements in the members area after an officer logs in", async () => {
+    render(<AppShell />);
+    fireEvent.click(screen.getByRole("button", { name: "Members Login" }));
+    fireEvent.change(screen.getByLabelText("Membership Number"), { target: { value: "8301001" } });
+    fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "faith830" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+    await waitFor(() => screen.getByRole("heading", { name: "Members Area" }));
+    expect(screen.getByRole("button", { name: "Edit Announcements" })).toBeInTheDocument();
+  });
+
+  it("hides Edit Announcements in the members area after a non-officer logs in", async () => {
+    vi.mocked(api.loginMember).mockResolvedValueOnce({ token: NON_OFFICER_TOKEN });
+    render(<AppShell />);
+    fireEvent.click(screen.getByRole("button", { name: "Members Login" }));
+    fireEvent.change(screen.getByLabelText("Membership Number"), { target: { value: "8301004" } });
+    fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "hope830" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+    await waitFor(() => screen.getByRole("heading", { name: "Members Area" }));
+    expect(screen.queryByRole("button", { name: "Edit Announcements" })).toBeNull();
+  });
+
+  it("officer can navigate into Edit Announcements from the members area", async () => {
+    render(<AppShell />);
+    fireEvent.click(screen.getByRole("button", { name: "Members Login" }));
+    fireEvent.change(screen.getByLabelText("Membership Number"), { target: { value: "8301001" } });
+    fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "faith830" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+    await waitFor(() => screen.getByRole("heading", { name: "Members Area" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Announcements" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Edit Announcements" })).toBeInTheDocument();
     });
   });
 });

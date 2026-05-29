@@ -323,6 +323,169 @@ test("officer sees Calendar Updates entry and can open the officer calendar view
   await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
 });
 
+test("non-officer does not see Edit Announcements entry in members area", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301004");
+  await page.getByLabel("Passcode").fill("hope830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("button", { name: "Edit Announcements" })).toHaveCount(0);
+});
+
+test("officer sees Edit Announcements entry and can open the announcements officer view", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
+  await page.getByRole("main").getByRole("button", { name: "Edit Announcements" }).click();
+  await expect(page.getByRole("heading", { name: "Edit Announcements" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
+});
+
+test("Add Announcement form stays open with values preserved when the backend returns an error", async ({ page }) => {
+  // Intercept POST /announcements to simulate a backend error with a `detail` payload.
+  await page.route("**/announcements", (route) => {
+    if (route.request().method() === "POST") {
+      route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Announcement service is temporarily unavailable." }),
+      });
+    } else {
+      route.continue();
+    }
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Edit Announcements" }).click();
+
+  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Title").fill("Drafted Title");
+  await page.getByLabel("Announcement Details").fill("Drafted body.");
+  await page.getByLabel("Date to Delete").fill("2026-12-31");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Backend error message surfaces verbatim in the modal
+  await expect(page.getByRole("heading", { name: "Error" })).toBeVisible();
+  await expect(page.getByText("Announcement service is temporarily unavailable.")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+
+  // Form is still open, values preserved
+  await expect(page.getByRole("heading", { name: "Add Announcement" })).toBeVisible();
+  await expect(page.getByLabel("Title")).toHaveValue("Drafted Title");
+  await expect(page.getByLabel("Announcement Details")).toHaveValue("Drafted body.");
+  await expect(page.getByLabel("Date to Delete")).toHaveValue("2026-12-31");
+  await page.getByRole("button", { name: "Cancel" }).click();
+});
+
+test("officer Add/Edit/Delete reflects in the public News view", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Edit Announcements" }).click();
+  await expect(page.getByRole("heading", { name: "Edit Announcements" })).toBeVisible();
+
+  // Add
+  await page.getByRole("button", { name: "Add" }).click();
+  await expect(page.getByRole("heading", { name: "Add Announcement" })).toBeVisible();
+  await page.getByLabel("Title").fill("E2E Sync Announcement");
+  await page.getByLabel("Announcement Details").fill("Created from the officer view.");
+  await page.getByLabel("Date to Delete").fill("2026-12-31");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("E2E Sync Announcement")).toBeVisible();
+
+  // Confirm it appears in the public News view (sorted newest first, so it should be the first box)
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "News & Announcements" }).click();
+  await expect(page.getByRole("button", { name: "E2E Sync Announcement" })).toBeVisible();
+
+  // Back to officer view and edit
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Members Login" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Edit Announcements" }).click();
+  await page.getByRole("button", { name: "Select announcement E2E Sync Announcement" }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByRole("heading", { name: "Edit Announcement", exact: true })).toBeVisible();
+  await page.getByLabel("Title").fill("E2E Edited Announcement");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("E2E Edited Announcement")).toBeVisible();
+  await expect(page.getByText("E2E Sync Announcement")).not.toBeVisible();
+
+  // Confirm edit on public side
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "News & Announcements" }).click();
+  await expect(page.getByRole("button", { name: "E2E Edited Announcement" })).toBeVisible();
+
+  // Back to officer view and delete
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Members Login" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Edit Announcements" }).click();
+  await page.getByRole("button", { name: "Select announcement E2E Edited Announcement" }).click();
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("heading", { name: "Confirm the delete?" })).toBeVisible();
+  const dialog = page.locator("div.fixed").filter({ hasText: "Confirm the delete?" });
+  await dialog.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("E2E Edited Announcement")).not.toBeVisible();
+
+  // Confirm gone from public News
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "News & Announcements" }).click();
+  await expect(page.getByText("E2E Edited Announcement")).not.toBeVisible();
+});
+
+test("announcement with deleteDate=today is still visible in the public News view", async ({ page }) => {
+  // Compute today in the browser's local time, formatted as YYYY-MM-DD
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const dd = String(today.getDate()).padStart(2, "0");
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+  const title = `E2E Today-Boundary ${Date.now()}`;
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Edit Announcements" }).click();
+
+  // Create an announcement that expires today
+  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Title").fill(title);
+  await page.getByLabel("Announcement Details").fill("Should be visible through today.");
+  await page.getByLabel("Date to Delete").fill(todayStr);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+
+  // Public view should still show it (visible through the delete date itself)
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "News & Announcements" }).click();
+  await expect(page.getByRole("button", { name: title })).toBeVisible();
+
+  // Clean up — delete the announcement we just created so the seed doesn't drift across runs
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Members Login" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Edit Announcements" }).click();
+  await page.getByRole("button", { name: `Select announcement ${title}` }).click();
+  await page.getByRole("button", { name: "Delete" }).click();
+  const dialog = page.locator("div.fixed").filter({ hasText: "Confirm the delete?" });
+  await dialog.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+});
+
 test("logout returns to login form", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Members Login" }).click();

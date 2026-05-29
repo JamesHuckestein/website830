@@ -16,13 +16,13 @@ const baseLinks: { id: MemberSubSection; label: string }[] = [
   { id: "meetingMinutes",  label: "Meeting Minutes" },
 ];
 
-const officerOnlyLink: { id: MemberSubSection; label: string } = {
-  id: "calendarUpdates",
-  label: "Calendar Updates",
-};
+const officerOnlyLinks: { id: MemberSubSection; label: string }[] = [
+  { id: "calendarUpdates",     label: "Calendar Updates" },
+  { id: "announcementsUpdate", label: "Edit Announcements" },
+];
 
 export function MembersArea({ isOfficer, onSelect, onLogout }: MembersAreaProps) {
-  const links = isOfficer ? [...baseLinks, officerOnlyLink] : baseLinks;
+  const links = isOfficer ? [...baseLinks, ...officerOnlyLinks] : baseLinks;
   return (
     <section className="space-y-6">
       <h2 className="text-2xl font-semibold text-[#032147]">Members Area</h2>

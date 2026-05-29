@@ -45,4 +45,21 @@ describe("MembersArea", () => {
     fireEvent.click(screen.getByRole("button", { name: "Calendar Updates" }));
     expect(onSelect).toHaveBeenCalledWith("calendarUpdates");
   });
+
+  it("hides the Edit Announcements link for non-officers", () => {
+    render(<MembersArea isOfficer={false} onSelect={vi.fn()} onLogout={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Edit Announcements" })).toBeNull();
+  });
+
+  it("shows the Edit Announcements link for officers", () => {
+    render(<MembersArea isOfficer={true} onSelect={vi.fn()} onLogout={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Edit Announcements" })).toBeInTheDocument();
+  });
+
+  it("dispatches announcementsUpdate when the Edit Announcements link is clicked", () => {
+    const onSelect = vi.fn();
+    render(<MembersArea isOfficer={true} onSelect={onSelect} onLogout={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Announcements" }));
+    expect(onSelect).toHaveBeenCalledWith("announcementsUpdate");
+  });
 });
