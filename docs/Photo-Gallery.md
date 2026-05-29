@@ -47,7 +47,8 @@
 - Extend the API Routes so that officers can add, edit, and delete photos.
 
 ## Part 8: Frontend + Backend Integration
-- Replace dummy data in add, edit and delete components in the officer edit photo gallery area with API calls.
+- Replace dummy data in add, edit and delete components in the officer edit photo gallery
+ area with API calls.
  - Unit tests mock the API; E2E tests hit the real running backend
  - Database is updated when forms are submitted
 

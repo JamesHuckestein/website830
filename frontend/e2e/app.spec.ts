@@ -486,6 +486,140 @@ test("announcement with deleteDate=today is still visible in the public News vie
   await page.getByRole("button", { name: "Dismiss" }).click();
 });
 
+test("non-officer does not see Edit Photo Gallery entry in members area", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301004");
+  await page.getByLabel("Passcode").fill("hope830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("button", { name: "Edit Photo Gallery" })).toHaveCount(0);
+  // And the editor heading never appears as a result.
+  await expect(page.getByRole("heading", { name: "Edit Photo Gallery", exact: true })).toHaveCount(0);
+});
+
+test("officer sees Edit Photo Gallery entry and can open the officer photo view", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
+  await page.getByRole("main").getByRole("button", { name: "Edit Photo Gallery" }).click();
+  await expect(page.getByRole("heading", { name: "Edit Photo Gallery", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
+});
+
+test("public Photo Galleries section is visible to logged-out visitors", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Photo Galleries" }).click();
+  await expect(page.getByRole("heading", { name: "Photo Galleries" })).toBeVisible();
+  // Seed photos render their titles
+  await expect(page.getByText("Spring Charity Dinner 2026")).toBeVisible();
+  // No editor controls visible to a logged-out visitor
+  await expect(page.getByRole("button", { name: "Add" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Delete", exact: true })).toHaveCount(0);
+});
+
+test("Add Photo form stays open with values preserved when the backend returns an error", async ({ page }) => {
+  // Intercept POST /photos to simulate a backend error with a `detail` payload.
+  await page.route("**/photos", (route) => {
+    if (route.request().method() === "POST") {
+      route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Photo service is temporarily unavailable." }),
+      });
+    } else {
+      route.continue();
+    }
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Edit Photo Gallery" }).click();
+
+  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Title").fill("Drafted Title");
+  await page.getByLabel("Upload Photo").fill("/gallery/drafted.jpg");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Backend error message surfaces verbatim in the modal
+  await expect(page.getByRole("heading", { name: "Error" })).toBeVisible();
+  await expect(page.getByText("Photo service is temporarily unavailable.")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+
+  // Form is still open, values preserved
+  await expect(page.getByRole("heading", { name: "Add Photo", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Title")).toHaveValue("Drafted Title");
+  await expect(page.getByLabel("Upload Photo")).toHaveValue("/gallery/drafted.jpg");
+  await page.getByRole("button", { name: "Cancel" }).click();
+});
+
+test("officer Add/Edit/Delete reflects in the public Photo Galleries view", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301002");
+  await page.getByLabel("Passcode").fill("charity830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Edit Photo Gallery" }).click();
+  await expect(page.getByRole("heading", { name: "Edit Photo Gallery", exact: true })).toBeVisible();
+
+  // Add
+  await page.getByRole("button", { name: "Add" }).click();
+  await expect(page.getByRole("heading", { name: "Add Photo", exact: true })).toBeVisible();
+  await page.getByLabel("Title").fill("E2E Sync Photo");
+  await page.getByLabel("Upload Photo").fill("/gallery/e2e-sync.jpg");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("E2E Sync Photo")).toBeVisible();
+
+  // Confirm it appears in the public Photo Galleries view (sorted oldest first, so newest at the bottom)
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Photo Galleries" }).click();
+  await expect(page.getByText("E2E Sync Photo")).toBeVisible();
+
+  // Back to officer view and edit
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Members Login" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Edit Photo Gallery" }).click();
+  await page.getByRole("button", { name: "Select photo E2E Sync Photo" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Edit Photo", exact: true })).toBeVisible();
+  await page.getByLabel("Title").fill("E2E Edited Photo");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("E2E Edited Photo")).toBeVisible();
+  await expect(page.getByText("E2E Sync Photo")).not.toBeVisible();
+
+  // Confirm edit on public side
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Photo Galleries" }).click();
+  await expect(page.getByText("E2E Edited Photo")).toBeVisible();
+
+  // Back to officer view and delete
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Members Login" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Edit Photo Gallery" }).click();
+  await page.getByRole("button", { name: "Select photo E2E Edited Photo" }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Confirm the delete?" })).toBeVisible();
+  const dialog = page.locator("div.fixed").filter({ hasText: "Confirm the delete?" });
+  await dialog.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("E2E Edited Photo")).not.toBeVisible();
+
+  // Confirm gone from public Photo Galleries
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Photo Galleries" }).click();
+  await expect(page.getByText("E2E Edited Photo")).not.toBeVisible();
+});
+
 test("logout returns to login form", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Members Login" }).click();

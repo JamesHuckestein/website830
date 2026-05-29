@@ -63,6 +63,27 @@ Meeting minutes are PDF files stored in S3. This table holds metadata only.
 
 ---
 
+## Table: photos
+
+Photo gallery metadata. The image files themselves live in S3 (or are served
+through CloudFront); this table stores the URL and the title shown in the
+two-column public grid. See `backend/migrations/0003_photos.sql` for the DDL.
+
+| Column | Type | Nullable | Notes |
+|---|---|---|---|
+| id | uuid | NO | PK |
+| title | varchar(200) | NO | non-empty; shown under each photo card |
+| photo_url | varchar(2048) | NO | non-empty; production: full S3/CloudFront URL |
+| created_by | varchar(20) | NO | FK → members.member_number (officer who added the photo) |
+| created_at | timestamptz | NO | default now() |
+| updated_at | timestamptz | NO | default now() |
+
+Indexed by `created_at ASC` to support the gallery's oldest-first / newest-last
+ordering. There is no auto-purge — photos remain visible until an officer
+deletes them.
+
+---
+
 ## S3 Bucket Layout
 
 ```
@@ -75,6 +96,10 @@ koc-830-assets/
     YYYY/
       MM/
         {slug}.pdf          — council meeting minutes PDF
+  gallery/
+    YYYY/
+      MM/
+        {uuid}.{ext}        — one file per gallery photo (jpeg/png/webp/gif)
 ```
 
 ---

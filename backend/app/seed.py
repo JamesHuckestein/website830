@@ -13,6 +13,7 @@ prayer_requests_store: list[dict] = copy.deepcopy(_ORIGINAL["prayer_requests"])
 meeting_minutes_store: list[dict] = copy.deepcopy(_ORIGINAL["meeting_minutes"])
 events_store: list[dict] = copy.deepcopy(_ORIGINAL["events"])
 announcements_store: list[dict] = copy.deepcopy(_ORIGINAL["announcements"])
+photos_store: list[dict] = copy.deepcopy(_ORIGINAL["photos"])
 
 
 def reset_to_seed() -> None:
@@ -27,3 +28,5 @@ def reset_to_seed() -> None:
     events_store.extend(copy.deepcopy(_ORIGINAL["events"]))
     announcements_store.clear()
     announcements_store.extend(copy.deepcopy(_ORIGINAL["announcements"]))
+    photos_store.clear()
+    photos_store.extend(copy.deepcopy(_ORIGINAL["photos"]))

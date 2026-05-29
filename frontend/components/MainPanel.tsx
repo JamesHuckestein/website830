@@ -13,6 +13,8 @@ import { MembersLoginForm } from "@/components/MembersLoginForm";
 import { News } from "@/components/News";
 import { NominationForm } from "@/components/NominationForm";
 import { OfficerContacts } from "@/components/OfficerContacts";
+import { PhotoGallery } from "@/components/PhotoGallery";
+import { PhotoGalleryUpdate } from "@/components/PhotoGalleryUpdate";
 import { PrayerRequests } from "@/components/PrayerRequests";
 import { PublicPrayerRequests } from "@/components/PublicPrayerRequests";
 import {
@@ -138,6 +140,9 @@ export function MainPanel({
     if (memberSubSection === "announcementsUpdate" && isOfficer) {
       return <AnnouncementsUpdate token={token!} onBack={onBackToMembersArea} />;
     }
+    if (memberSubSection === "editPhotoGallery" && isOfficer) {
+      return <PhotoGalleryUpdate token={token!} onBack={onBackToMembersArea} />;
+    }
 
     return (
       <MembersArea
@@ -238,6 +243,10 @@ export function MainPanel({
 
   if (activeSection === "news") {
     return <News />;
+  }
+
+  if (activeSection === "photos") {
+    return <PhotoGallery />;
   }
 
   const content = sectionContent[activeSection];

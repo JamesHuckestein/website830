@@ -62,4 +62,21 @@ describe("MembersArea", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit Announcements" }));
     expect(onSelect).toHaveBeenCalledWith("announcementsUpdate");
   });
+
+  it("hides the Edit Photo Gallery link for non-officers", () => {
+    render(<MembersArea isOfficer={false} onSelect={vi.fn()} onLogout={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Edit Photo Gallery" })).toBeNull();
+  });
+
+  it("shows the Edit Photo Gallery link for officers", () => {
+    render(<MembersArea isOfficer={true} onSelect={vi.fn()} onLogout={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Edit Photo Gallery" })).toBeInTheDocument();
+  });
+
+  it("dispatches editPhotoGallery when the Edit Photo Gallery link is clicked", () => {
+    const onSelect = vi.fn();
+    render(<MembersArea isOfficer={true} onSelect={onSelect} onLogout={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Photo Gallery" }));
+    expect(onSelect).toHaveBeenCalledWith("editPhotoGallery");
+  });
 });

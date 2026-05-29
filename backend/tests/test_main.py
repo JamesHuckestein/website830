@@ -1062,3 +1062,303 @@ def test_update_announcement_preserves_created_by_and_created_at(monkeypatch):
     assert after["createdBy"] == "8301002"  # original creator preserved
     assert after["createdAt"] == "2026-05-01T00:00:00Z"  # original timestamp preserved
     assert after["updatedAt"] == "2026-05-15T00:00:00Z"  # bumped to current _today
+
+
+# ---------------------------------------------------------------------------
+# Photos (gallery)
+# ---------------------------------------------------------------------------
+
+def _photo_payload(**overrides) -> dict:
+    base = {
+        "title": "Test Photo",
+        "photoUrl": "/gallery/test-photo.jpg",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_get_photos_no_auth_required():
+    r = client.get("/photos")
+    assert r.status_code == 200
+
+
+def test_get_photos_returns_seed_camelcase_shape():
+    r = client.get("/photos")
+    items = r.json()
+    assert len(items) == 2
+    keys = {"id", "title", "photoUrl", "createdBy", "createdAt", "updatedAt"}
+    assert set(items[0].keys()) == keys
+
+
+def test_get_photos_sorted_oldest_first():
+    items = client.get("/photos").json()
+    titles = [p["title"] for p in items]
+    # Seed created_at order: 0001 (Apr 10) < 0002 (Apr 22) so 0001 is first
+    assert titles == ["Spring Charity Dinner 2026", "St. Patrick Day Service Project"]
+
+
+def test_create_photo_officer_succeeds():
+    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload())
+    assert r.status_code == 200
+    body = r.json()
+    assert body["success"] is True
+    assert body["message"] == "Photo added."
+    assert "id" in body
+    listing = client.get("/photos").json()
+    assert any(p["id"] == body["id"] for p in listing)
+
+
+def test_create_photo_non_officer_forbidden():
+    r = client.post("/photos", headers=_non_officer_auth(), json=_photo_payload())
+    assert r.status_code == 403
+
+
+def test_create_photo_requires_auth():
+    r = client.post("/photos", json=_photo_payload())
+    assert r.status_code in (401, 403)
+
+
+def test_create_photo_rejects_empty_title():
+    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(title=""))
+    assert r.status_code == 422
+
+
+def test_create_photo_rejects_whitespace_only_title():
+    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(title="   "))
+    assert r.status_code == 422
+
+
+def test_create_photo_rejects_title_too_long():
+    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(title="x" * 201))
+    assert r.status_code == 422
+
+
+def test_create_photo_rejects_empty_photo_url():
+    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(photoUrl=""))
+    assert r.status_code == 422
+
+
+def test_create_photo_rejects_photo_url_too_long():
+    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(photoUrl="x" * 2049))
+    assert r.status_code == 422
+
+
+def test_update_photo_officer_succeeds():
+    target_id = "e5f6a7b8-0001-0000-0000-000000000001"
+    r = client.put(
+        f"/photos/{target_id}",
+        headers=_officer_auth(),
+        json=_photo_payload(title="Renamed", photoUrl="/gallery/renamed.png"),
+    )
+    assert r.status_code == 200
+    listing = client.get("/photos").json()
+    updated = next(p for p in listing if p["id"] == target_id)
+    assert updated["title"] == "Renamed"
+    assert updated["photoUrl"] == "/gallery/renamed.png"
+
+
+def test_update_photo_non_officer_forbidden():
+    target_id = "e5f6a7b8-0001-0000-0000-000000000001"
+    r = client.put(f"/photos/{target_id}", headers=_non_officer_auth(), json=_photo_payload())
+    assert r.status_code == 403
+
+
+def test_update_photo_not_found():
+    r = client.put("/photos/no-such-id", headers=_officer_auth(), json=_photo_payload())
+    assert r.status_code == 404
+
+
+def test_update_photo_rejects_invalid_body():
+    target_id = "e5f6a7b8-0001-0000-0000-000000000001"
+    r = client.put(f"/photos/{target_id}", headers=_officer_auth(), json={"title": "only-title"})
+    assert r.status_code == 422
+
+
+def test_delete_photo_officer_succeeds():
+    target_id = "e5f6a7b8-0001-0000-0000-000000000001"
+    r = client.delete(f"/photos/{target_id}", headers=_officer_auth())
+    assert r.status_code == 200
+    listing = client.get("/photos").json()
+    assert all(p["id"] != target_id for p in listing)
+
+
+def test_delete_photo_non_officer_forbidden():
+    target_id = "e5f6a7b8-0001-0000-0000-000000000001"
+    r = client.delete(f"/photos/{target_id}", headers=_non_officer_auth())
+    assert r.status_code == 403
+
+
+def test_delete_photo_not_found():
+    r = client.delete("/photos/no-such-id", headers=_officer_auth())
+    assert r.status_code == 404
+
+
+def test_delete_photo_requires_auth():
+    target_id = "e5f6a7b8-0001-0000-0000-000000000001"
+    r = client.delete(f"/photos/{target_id}")
+    assert r.status_code in (401, 403)
+
+
+def test_photos_concurrent_post_no_lost_writes(monkeypatch):
+    """5 concurrent POSTs all succeed with unique ids and the store ends up with
+    the expected count. Demonstrates the lock prevents lost appends under the
+    slow-append shim."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app import main as _main
+    from app.seed import photos_store as _orig_store
+
+    class SlowAppendStore(list):
+        def append(self, item):  # type: ignore[override]
+            time.sleep(0.05)
+            list.append(self, item)
+
+    slow = SlowAppendStore(_orig_store)
+    monkeypatch.setattr(_main, "photos_store", slow)
+
+    headers = _officer_auth()
+    payload = _photo_payload()
+
+    def fire():
+        return client.post("/photos", headers=headers, json=payload)
+
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        results = [f.result() for f in [ex.submit(fire) for _ in range(5)]]
+
+    statuses = [r.status_code for r in results]
+    new_ids = {r.json()["id"] for r in results if r.status_code == 200}
+    assert statuses.count(200) == 5, statuses
+    assert len(new_ids) == 5, "expected 5 distinct ids"
+    # Seed had 2 + 5 newly created = 7
+    assert len(slow) == 7
+
+
+def test_photo_full_lifecycle(monkeypatch):
+    """POST → GET → PUT → GET → DELETE → GET against the live in-memory store."""
+    from app import main as _main
+
+    monkeypatch.setattr(_main, "_now_iso_precise", lambda: "2026-05-01T10:00:00Z")
+
+    # Seed has 2 photos
+    assert len(client.get("/photos").json()) == 2
+
+    # Create
+    r = client.post(
+        "/photos",
+        headers=_officer_auth(),
+        json=_photo_payload(title="LC1", photoUrl="/gallery/lc1.jpg"),
+    )
+    assert r.status_code == 200
+    new_id = r.json()["id"]
+
+    # GET sees the new one (sorts to the bottom — newest is last)
+    listing = client.get("/photos").json()
+    assert len(listing) == 3
+    assert listing[-1]["id"] == new_id
+    assert listing[-1]["title"] == "LC1"
+    assert listing[-1]["photoUrl"] == "/gallery/lc1.jpg"
+    assert listing[-1]["createdBy"] == "8301002"
+    assert listing[-1]["createdAt"] == listing[-1]["updatedAt"]
+
+    # Update
+    r2 = client.put(
+        f"/photos/{new_id}",
+        headers=_officer_auth(),
+        json=_photo_payload(title="LC2", photoUrl="/gallery/lc2.jpg"),
+    )
+    assert r2.status_code == 200
+
+    # GET sees the update
+    listing2 = client.get("/photos").json()
+    updated = next(p for p in listing2 if p["id"] == new_id)
+    assert updated["title"] == "LC2"
+    assert updated["photoUrl"] == "/gallery/lc2.jpg"
+
+    # Delete
+    r3 = client.delete(f"/photos/{new_id}", headers=_officer_auth())
+    assert r3.status_code == 200
+
+    # GET no longer contains
+    listing3 = client.get("/photos").json()
+    assert all(p["id"] != new_id for p in listing3)
+    assert len(listing3) == 2
+
+
+def test_create_photo_populates_audit_fields_from_jwt_and_now(monkeypatch):
+    from app import main as _main
+
+    monkeypatch.setattr(_main, "_now_iso_precise", lambda: "2026-05-01T09:30:00Z")
+    r = client.post(
+        "/photos",
+        headers=_officer_auth(),
+        json=_photo_payload(title="Audit"),
+    )
+    assert r.status_code == 200
+    new_id = r.json()["id"]
+    record = next(p for p in client.get("/photos").json() if p["id"] == new_id)
+    assert record["createdBy"] == "8301002"
+    assert record["createdAt"] == "2026-05-01T09:30:00Z"
+    assert record["updatedAt"] == "2026-05-01T09:30:00Z"
+
+
+def test_update_photo_preserves_created_by_and_created_at(monkeypatch):
+    from app import main as _main
+
+    monkeypatch.setattr(_main, "_now_iso_precise", lambda: "2026-05-01T09:30:00Z")
+    new_id = client.post(
+        "/photos",
+        headers=_officer_auth(),
+        json=_photo_payload(title="A"),
+    ).json()["id"]
+
+    monkeypatch.setattr(_main, "_now_iso_precise", lambda: "2026-05-15T14:45:00Z")
+    # PUT as a different officer to ensure created_by isn't overwritten by the JWT sub
+    r = client.put(
+        f"/photos/{new_id}",
+        headers=_auth("8301001", "faith830"),  # Deputy Grand Knight, also an officer
+        json=_photo_payload(title="B"),
+    )
+    assert r.status_code == 200
+
+    after = next(p for p in client.get("/photos").json() if p["id"] == new_id)
+    assert after["createdBy"] == "8301002"  # original creator preserved
+    assert after["createdAt"] == "2026-05-01T09:30:00Z"  # original timestamp preserved
+    assert after["updatedAt"] == "2026-05-15T14:45:00Z"  # bumped to current time
+
+
+def test_get_photos_same_day_sorted_by_insertion_order(monkeypatch):
+    """Photos created in the same day must appear oldest-first by insertion
+    order, not by random UUID tiebreaker. Regression test for the date-only
+    `_now_iso()` bug where every same-day record shared `T00:00:00Z` and the
+    sort fell back to a random `id`."""
+    from app import main as _main
+
+    # Three creates on the same day, each at a distinct second.
+    timestamps = iter([
+        "2026-06-01T08:00:00Z",
+        "2026-06-01T08:00:01Z",
+        "2026-06-01T08:00:02Z",
+    ])
+    monkeypatch.setattr(_main, "_now_iso_precise", lambda: next(timestamps))
+
+    for title in ("Alpha", "Bravo", "Charlie"):
+        r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(title=title))
+        assert r.status_code == 200
+
+    listing = client.get("/photos").json()
+    new_titles = [p["title"] for p in listing if p["title"] in {"Alpha", "Bravo", "Charlie"}]
+    assert new_titles == ["Alpha", "Bravo", "Charlie"]
+
+
+def test_create_photo_trims_title_and_photo_url():
+    r = client.post(
+        "/photos",
+        headers=_officer_auth(),
+        json=_photo_payload(title="  Padded  ", photoUrl="  /gallery/padded.jpg  "),
+    )
+    assert r.status_code == 200
+    new_id = r.json()["id"]
+    record = next(p for p in client.get("/photos").json() if p["id"] == new_id)
+    assert record["title"] == "Padded"
+    assert record["photoUrl"] == "/gallery/padded.jpg"

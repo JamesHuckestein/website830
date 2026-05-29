@@ -68,6 +68,15 @@ export type Announcement = {
   updatedAt: string;
 };
 
+export type Photo = {
+  id: string;
+  title: string;
+  photoUrl: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 async function apiFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -237,6 +246,47 @@ export async function deleteAnnouncement(
   id: string,
 ): Promise<{ success: boolean; message: string }> {
   return apiFetch<{ success: boolean; message: string }>(`/announcements/${id}`, token, {
+    method: "DELETE",
+  });
+}
+
+export async function getPhotos(): Promise<Photo[]> {
+  const res = await fetch(`${API_BASE}/photos`);
+  if (!res.ok) throw new Error(`API ${res.status}: /photos`);
+  return res.json() as Promise<Photo[]>;
+}
+
+export type PhotoWriteBody = {
+  title: string;
+  photoUrl: string;
+};
+
+export async function createPhoto(
+  token: string,
+  body: PhotoWriteBody,
+): Promise<{ success: boolean; message: string; id: string }> {
+  return apiFetch<{ success: boolean; message: string; id: string }>("/photos", token, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updatePhoto(
+  token: string,
+  id: string,
+  body: PhotoWriteBody,
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/photos/${id}`, token, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deletePhoto(
+  token: string,
+  id: string,
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/photos/${id}`, token, {
     method: "DELETE",
   });
 }

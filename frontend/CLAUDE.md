@@ -63,14 +63,33 @@ AnnouncementDetailModal  — public read-only popover: title, details (whitespac
 AnnouncementFormModal    — officer form: Date to Delete (required <input type="date">),
                            Title (required, ≤200), Announcement Details (required, ≤2000);
                            Save / Cancel; `submitting` prop disables both and shows "Saving..."
+
+PhotoGallery             — public, renders for activeSection === "photos"
+                           fetches via getPhotos(); two-column grid of <PhotoCard /> boxes
+                           sorted oldest-first (newest at the bottom); non-interactive
+PhotoGalleryUpdate       — officer-only members sub-section
+                           (memberSubSection === "editPhotoGallery")
+                           props: { token, onBack }; reuses PhotoCard with click-to-select
+                           highlight ring; Add/Edit/Delete buttons; calls createPhoto /
+                           updatePhoto / deletePhoto on the backend; uses PhotoFormModal /
+                           ConfirmDialog / SubmitModal as needed; includes the same stale-
+                           selection-cleanup effect as AnnouncementsUpdate
+PhotoCard                — shared, presentational: rounded box with centered <Image>
+                           (object-contain) and a title strip below; mirrors the Officers
+                           grid card layout so the public and officer views look identical
+PhotoFormModal           — officer form: Title (required, ≤200), Upload Photo (required URL
+                           text field, ≤2048) with "Supported formats: JPEG, PNG, WebP, GIF"
+                           helper text; Save / Cancel; `submitting` prop disables both and
+                           shows "Saving...". Phase 2 takes a URL string — real drag-and-drop
+                           upload + S3 storage is deferred to a future phase.
 ```
 
 ## Data & Auth
 
 `data/siteData.ts` — single source of truth for all content:
-- Types: `SectionId` (union), `NavItem`, `Officer`, `MemberSubSection` (includes `"calendarUpdates"` and `"announcementsUpdate"`)
+- Types: `SectionId` (union), `NavItem`, `Officer`, `MemberSubSection` (includes `"calendarUpdates"`, `"announcementsUpdate"`, and `"editPhotoGallery"`)
 - Exports: `councilInfo`, `aboutCouncilDetails`, `navItems`, `officers[]`, `sectionContent`
-- Note: the `events` and `news` SectionIds are no longer in `sectionContent` — they render `<Calendar />` and `<News />` directly from `MainPanel`.
+- Note: the `events`, `news`, and `photos` SectionIds are no longer in `sectionContent` — they render `<Calendar />`, `<News />`, and `<PhotoGallery />` directly from `MainPanel`.
 
 `lib/api.ts` — typed API client:
 - Members: `loginMember`, `getMembers`, `getMember`, `updateMember`, `getBirthdays`, `exportMembersCSV`
@@ -78,6 +97,7 @@ AnnouncementFormModal    — officer form: Date to Delete (required <input type=
 - Meeting minutes: `getMeetingMinutes`, `getMeetingMinutesDetail`
 - Events (calendar): `getEvents(month?)`, `createEvent`, `updateEvent`, `deleteEvent` — write methods require an officer JWT; backend enforces the 3-events-per-day cap with HTTP 409 Conflict.
 - Announcements (news): `getAnnouncements()`, `createAnnouncement`, `updateAnnouncement`, `deleteAnnouncement` — `getAnnouncements` is public and pre-sorted newest-first; backend filters out rows where `delete_date < today`. Write methods require an officer JWT and reject past `delete_date` values with HTTP 422.
+- Photos (gallery): `getPhotos()`, `createPhoto`, `updatePhoto`, `deletePhoto` — `getPhotos` is public and pre-sorted oldest-first (so the newest photo lands at the bottom of the two-column grid). Write methods require an officer JWT; payload is `{ title (≤200), photoUrl (≤2048) }`.
 
 `lib/auth.ts` — `authenticateMember(membershipNumber, passcode): boolean`
 - Demo credentials: `{ "8301001": "faith830", "8301002": "charity830" }`

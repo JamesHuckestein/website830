@@ -4,7 +4,7 @@ import logging
 import os
 import threading
 import uuid
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 import httpx
 import jwt
@@ -19,6 +19,7 @@ from app.seed import (
     events_store,
     meeting_minutes_store,
     members_store,
+    photos_store,
     prayer_requests_store,
 )
 
@@ -150,6 +151,40 @@ class AnnouncementUpdate(_AnnouncementBody):
     pass
 
 
+class _PhotoBody(BaseModel):
+    """Shared request shape for POST /photos and PUT /photos/{id}.
+
+    Phase-2 dev: `photoUrl` is a plain string (path or URL). A future phase
+    swaps this for a multipart upload pipeline + S3 storage.
+    """
+    title: str = Field(min_length=1, max_length=200)
+    photoUrl: str = Field(min_length=1, max_length=2048)
+
+    @field_validator("title")
+    @classmethod
+    def _strip_title(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("title cannot be blank")
+        return stripped
+
+    @field_validator("photoUrl")
+    @classmethod
+    def _strip_photo_url(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("photoUrl cannot be blank")
+        return stripped
+
+
+class PhotoCreate(_PhotoBody):
+    pass
+
+
+class PhotoUpdate(_PhotoBody):
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
@@ -179,6 +214,18 @@ def _now_iso() -> str:
     return _today().isoformat() + "T00:00:00Z"
 
 
+def _now_iso_precise() -> str:
+    """ISO 8601 UTC timestamp with second precision.
+
+    Used where same-day insertion order matters (e.g. the photo gallery's
+    oldest-first sort): `_now_iso()`'s `T00:00:00Z` truncation collapses every
+    same-day record onto the same string, after which the secondary UUID
+    tiebreaker is random and breaks the documented \"newest at the bottom\"
+    ordering.
+    """
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 # Serializes read-modify-write sequences against `events_store`. Sync routes run
 # in FastAPI's threadpool, so two concurrent POSTs targeting the same day could
 # otherwise each see "2 events" before either appends, producing 4. Required
@@ -190,6 +237,9 @@ _events_lock = threading.Lock()
 # but the lock still guards PUT (lookup→modify) and DELETE (enumerate→pop)
 # against concurrent mutation that could lose updates or pop the wrong index.
 _announcements_lock = threading.Lock()
+
+# Same protection for the photos store.
+_photos_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +299,17 @@ def _announcement_to_response(a: dict) -> dict:
         "createdBy": a["created_by"],
         "createdAt": a["created_at"],
         "updatedAt": a["updated_at"],
+    }
+
+
+def _photo_to_response(p: dict) -> dict:
+    return {
+        "id": p["id"],
+        "title": p["title"],
+        "photoUrl": p["photo_url"],
+        "createdBy": p["created_by"],
+        "createdAt": p["created_at"],
+        "updatedAt": p["updated_at"],
     }
 
 
@@ -535,6 +596,61 @@ def delete_announcement(announcement_id: str, _payload: dict = Depends(_require_
                 announcements_store.pop(i)
                 return {"success": True, "message": "Announcement deleted."}
     raise HTTPException(status_code=404, detail="Announcement not found.")
+
+
+@app.get("/photos")
+def get_photos():
+    """List all photos in the gallery.
+
+    Public (no auth). Returns photos sorted by ``created_at`` ascending
+    (oldest first; id ascending as a deterministic tiebreaker), so the
+    most recently added photo appears at the bottom of the two-column grid.
+    """
+    ordered = sorted(photos_store, key=lambda p: (p["created_at"], p["id"]))
+    return [_photo_to_response(p) for p in ordered]
+
+
+@app.post("/photos")
+def create_photo(body: PhotoCreate, payload: dict = Depends(_require_officer)):
+    new_id = str(uuid.uuid4())
+    now = _now_iso_precise()
+    with _photos_lock:
+        record = {
+            "id": new_id,
+            "title": body.title,
+            "photo_url": body.photoUrl,
+            "created_by": payload["sub"],
+            "created_at": now,
+            "updated_at": now,
+        }
+        photos_store.append(record)
+    return {"success": True, "message": "Photo added.", "id": new_id}
+
+
+@app.put("/photos/{photo_id}")
+def update_photo(
+    photo_id: str,
+    body: PhotoUpdate,
+    _payload: dict = Depends(_require_officer),
+):
+    with _photos_lock:
+        record = next((p for p in photos_store if p["id"] == photo_id), None)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Photo not found.")
+        record["title"] = body.title
+        record["photo_url"] = body.photoUrl
+        record["updated_at"] = _now_iso_precise()
+    return {"success": True, "message": "Photo updated."}
+
+
+@app.delete("/photos/{photo_id}")
+def delete_photo(photo_id: str, _payload: dict = Depends(_require_officer)):
+    with _photos_lock:
+        for i, p in enumerate(photos_store):
+            if p["id"] == photo_id:
+                photos_store.pop(i)
+                return {"success": True, "message": "Photo deleted."}
+    raise HTTPException(status_code=404, detail="Photo not found.")
 
 
 @app.post("/emails/officer")
