@@ -35,7 +35,8 @@ export type MemberSubSection =
   | "meetingMinutes"
   | "calendarUpdates"
   | "announcementsUpdate"
-  | "editPhotoGallery";
+  | "editPhotoGallery"
+  | "updateOfficers";
 
 export const OFFICER_TITLES = [
   "Grand Knight",

@@ -29,7 +29,7 @@ def _officer_auth() -> dict:
 
 
 def _non_officer_auth() -> dict:
-    return _auth("8301004", "hope830")  # Mark Radcliffe — no officer position
+    return _auth("8301015", "hope830")  # Thomas Wilson — no officer position
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ def test_login_officer_returns_is_officer_true():
 
 
 def test_login_non_officer_returns_is_officer_false():
-    r = client.post("/auth/login", json={"membershipNumber": "8301004", "passcode": "hope830"})
+    r = client.post("/auth/login", json={"membershipNumber": "8301015", "passcode": "hope830"})
     assert r.status_code == 200
     import jwt as pyjwt
     payload = pyjwt.decode(r.json()["token"], options={"verify_signature": False})
@@ -92,7 +92,7 @@ def test_get_members_returns_all():
     r = client.get("/members", headers=_auth())
     assert r.status_code == 200
     members = r.json()
-    assert len(members) == 12
+    assert len(members) == 15
     assert members[0]["memberNumber"] == "8301001"
     assert "passcode" not in members[0]
 
@@ -399,7 +399,7 @@ def test_export_csv_officer_returns_csv():
     assert "text/csv" in r.headers["content-type"]
     lines = r.text.strip().splitlines()
     assert lines[0].startswith("memberNumber")
-    assert len(lines) == 13  # header + 12 members
+    assert len(lines) == 16  # header + 15 members
 
 
 def test_export_csv_contains_member_data():

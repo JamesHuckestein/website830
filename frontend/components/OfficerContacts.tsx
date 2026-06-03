@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 
-import { emailOfficer } from "@/lib/api";
+import { emailOfficer, getOfficers, type OfficerResponse } from "@/lib/api";
 import { SubmitModal } from "@/components/SubmitModal";
-import { officers } from "@/data/siteData";
 
 type OfficerContactsProps = {
   token: string;
@@ -13,11 +12,20 @@ type OfficerContactsProps = {
 };
 
 export function OfficerContacts({ token, onBack }: OfficerContactsProps) {
+  const [officerList, setOfficerList] = useState<OfficerResponse[] | null>(null);
   const [composingFor, setComposingFor] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [modal, setModal] = useState<{ success: boolean; message: string } | null>(null);
 
-  const officer = composingFor ? officers.find((o) => o.title === composingFor) : null;
+  useEffect(() => {
+    let cancelled = false;
+    getOfficers()
+      .then((data) => { if (!cancelled) setOfficerList(data); })
+      .catch(() => { if (!cancelled) setOfficerList([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const officer = composingFor && officerList ? officerList.find((o) => o.title === composingFor) : null;
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,34 +79,38 @@ export function OfficerContacts({ token, onBack }: OfficerContactsProps) {
       ) : (
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-[#032147]">Officers</h2>
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {officers.map((o) => (
-              <li key={o.title} className="overflow-hidden rounded-md border border-[#E7E7E7] bg-white">
-                <div className="flex justify-center bg-[#F5F5F5] p-2">
-                  <div className="rounded-md border border-[#E0E0E0] bg-white p-1">
-                    <Image
-                      src={o.imageUrl}
-                      alt={`${o.name} - ${o.title}`}
-                      width={120}
-                      height={160}
-                      className="block h-24 w-auto object-contain object-top"
-                    />
+          {officerList === null ? (
+            <p className="text-sm text-[#888888]">Loading officers...</p>
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {officerList.map((o) => (
+                <li key={o.title} className="overflow-hidden rounded-md border border-[#E7E7E7] bg-white">
+                  <div className="flex justify-center bg-[#F5F5F5] p-2">
+                    <div className="rounded-md border border-[#E0E0E0] bg-white p-1">
+                      <Image
+                        src={o.photoUrl}
+                        alt={`${o.name} - ${o.title}`}
+                        width={120}
+                        height={160}
+                        className="block h-24 w-auto object-contain object-top"
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-2 p-3">
-                  <p className="font-semibold text-[#032147]">{o.title}</p>
-                  <p className="text-sm text-[#888888]">{o.name}</p>
-                  <button
-                    type="button"
-                    onClick={() => setComposingFor(o.title)}
-                    className="rounded-md bg-[#4169E1] px-3 py-1 text-xs font-semibold text-white"
-                  >
-                    Send Email
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                  <div className="space-y-2 p-3">
+                    <p className="font-semibold text-[#032147]">{o.title}</p>
+                    <p className="text-sm text-[#888888]">{o.name}</p>
+                    <button
+                      type="button"
+                      onClick={() => setComposingFor(o.title)}
+                      className="rounded-md bg-[#4169E1] px-3 py-1 text-xs font-semibold text-white"
+                    >
+                      Send Email
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
           <button type="button" onClick={onBack} className="text-sm text-[#4169E1] underline">
             Back to Members Area
           </button>

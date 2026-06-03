@@ -4,15 +4,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/AppShell";
 import * as api from "@/lib/api";
 
-const OFFICER_TOKEN =
-  "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI4MzAxMDAxIiwiaXNPZmZpY2VyIjp0cnVlfQ.sig";
-const NON_OFFICER_TOKEN =
-  "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI4MzAxMDA0IiwiaXNPZmZpY2VyIjpmYWxzZX0.sig";
+function makeToken(payload: object): string {
+  const header = btoa(JSON.stringify({ alg: "HS256" }));
+  const body = btoa(JSON.stringify(payload));
+  return `${header}.${body}.sig`;
+}
+
+const OFFICER_TOKEN = makeToken({ sub: "8301001", isOfficer: true, officerPosition: "Deputy Grand Knight" });
+const NON_OFFICER_TOKEN = makeToken({ sub: "8301004", isOfficer: false, officerPosition: null });
 
 vi.mock("@/lib/api", () => ({
   loginMember: vi.fn(),
   getEvents: vi.fn().mockResolvedValue([]),
   getAnnouncements: vi.fn().mockResolvedValue([]),
+  getOfficers: vi.fn().mockResolvedValue([
+    { title: "Grand Knight", name: "John Akers", photoUrl: "/officers/john-h-akers.png" },
+    { title: "Deputy Grand Knight", name: "James Huckestein", photoUrl: "/officers/james-h.png" },
+  ]),
+  getMembers: vi.fn().mockResolvedValue([]),
 }));
 
 beforeEach(() => {
@@ -135,5 +144,38 @@ describe("AppShell", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Edit Announcements" })).toBeInTheDocument();
     });
+  });
+
+  it("shows Update Officers for a privileged officer (Deputy Grand Knight)", async () => {
+    render(<AppShell />);
+    fireEvent.click(screen.getByRole("button", { name: "Members Login" }));
+    fireEvent.change(screen.getByLabelText("Membership Number"), { target: { value: "8301001" } });
+    fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "faith830" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+    await waitFor(() => screen.getByRole("heading", { name: "Members Area" }));
+    expect(screen.getByRole("button", { name: "Update Officers" })).toBeInTheDocument();
+  });
+
+  it("hides Update Officers for a non-privileged officer (Chancellor)", async () => {
+    const chancellorToken = makeToken({ sub: "8301003", isOfficer: true, officerPosition: "Chancellor" });
+    vi.mocked(api.loginMember).mockResolvedValueOnce({ token: chancellorToken });
+    render(<AppShell />);
+    fireEvent.click(screen.getByRole("button", { name: "Members Login" }));
+    fireEvent.change(screen.getByLabelText("Membership Number"), { target: { value: "8301003" } });
+    fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+    await waitFor(() => screen.getByRole("heading", { name: "Members Area" }));
+    expect(screen.queryByRole("button", { name: "Update Officers" })).toBeNull();
+  });
+
+  it("hides Update Officers for a non-officer member", async () => {
+    vi.mocked(api.loginMember).mockResolvedValueOnce({ token: NON_OFFICER_TOKEN });
+    render(<AppShell />);
+    fireEvent.click(screen.getByRole("button", { name: "Members Login" }));
+    fireEvent.change(screen.getByLabelText("Membership Number"), { target: { value: "8301015" } });
+    fireEvent.change(screen.getByLabelText("Passcode"), { target: { value: "hope830" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+    await waitFor(() => screen.getByRole("heading", { name: "Members Area" }));
+    expect(screen.queryByRole("button", { name: "Update Officers" })).toBeNull();
   });
 });

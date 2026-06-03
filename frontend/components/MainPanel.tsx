@@ -1,5 +1,3 @@
-import Image from "next/image";
-
 import { AnnouncementsUpdate } from "@/components/AnnouncementsUpdate";
 import { BirthdayList } from "@/components/BirthdayList";
 import { Calendar } from "@/components/Calendar";
@@ -13,6 +11,8 @@ import { MembersLoginForm } from "@/components/MembersLoginForm";
 import { News } from "@/components/News";
 import { NominationForm } from "@/components/NominationForm";
 import { OfficerContacts } from "@/components/OfficerContacts";
+import { OfficersGrid } from "@/components/OfficersGrid";
+import { OfficersUpdate } from "@/components/OfficersUpdate";
 import { PhotoGallery } from "@/components/PhotoGallery";
 import { PhotoGalleryUpdate } from "@/components/PhotoGalleryUpdate";
 import { PrayerRequests } from "@/components/PrayerRequests";
@@ -29,6 +29,7 @@ type MainPanelProps = {
   activeSection: SectionId;
   isLoggedIn: boolean;
   isOfficer: boolean;
+  officerPosition: string | null;
   token: string | null;
   memberNumber: string | null;
   memberSubSection: MemberSubSection | null;
@@ -46,6 +47,7 @@ export function MainPanel({
   activeSection,
   isLoggedIn,
   isOfficer,
+  officerPosition,
   token,
   memberNumber,
   memberSubSection,
@@ -68,36 +70,7 @@ export function MainPanel({
   }
 
   if (activeSection === "officers") {
-    return (
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-[#032147]">Officers</h2>
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {officers.map((officer) => (
-            <li
-              key={officer.title}
-              className="overflow-hidden rounded-md border border-[#E7E7E7] bg-white"
-            >
-              <div className="flex justify-center bg-[#F5F5F5] p-2">
-                <div className="rounded-md border border-[#E0E0E0] bg-white p-1">
-                  <Image
-                    src={officer.imageUrl}
-                    alt={`${officer.name} - ${officer.title}`}
-                    width={384}
-                    height={512}
-                    className="block h-36 w-auto max-w-full object-contain object-top"
-                    sizes="(max-width: 640px) 42vw, 11rem"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1 p-3">
-                <p className="font-semibold text-[#032147]">{officer.title}</p>
-                <p className="text-sm text-[#888888]">{officer.name}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-    );
+    return <OfficersGrid />;
   }
 
   if (activeSection === "members") {
@@ -143,10 +116,14 @@ export function MainPanel({
     if (memberSubSection === "editPhotoGallery" && isOfficer) {
       return <PhotoGalleryUpdate token={token!} onBack={onBackToMembersArea} />;
     }
+    if (memberSubSection === "updateOfficers" && isOfficer) {
+      return <OfficersUpdate token={token!} onBack={onBackToMembersArea} />;
+    }
 
     return (
       <MembersArea
         isOfficer={isOfficer}
+        officerPosition={officerPosition}
         onSelect={onSelectMemberSubSection}
         onLogout={onLogout}
       />

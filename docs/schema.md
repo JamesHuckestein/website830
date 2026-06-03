@@ -100,7 +100,21 @@ koc-830-assets/
     YYYY/
       MM/
         {uuid}.{ext}        — one file per gallery photo (jpeg/png/webp/gif)
+  officer-photos/
+    {title-slug}.png        — one PNG per officer position (e.g. grand-knight.png)
 ```
+
+---
+
+## Officer Position Assignments
+
+No separate `officers` table exists. Officers are identified by the `officer_position` column on the `members` table. When a position is reassigned via `PUT /officers/{title}`:
+
+1. The previous holder's `officer_position` is set to `NULL`.
+2. The new holder's `officer_position` is set to the title.
+3. The uploaded PNG is stored in S3 at `officer-photos/{title-slug}.png`, overwriting the previous photo.
+
+Only four privileged positions may perform this action: Grand Knight, Deputy Grand Knight, Recorder, and Financial Secretary.
 
 ---
 

@@ -29,7 +29,7 @@ test("members area shows all 7 sub-section links after login", async ({ page }) 
   await expect(main.getByRole("button", { name: "Birthdays" })).toBeVisible();
   await expect(main.getByRole("button", { name: "Prayer Requests" })).toBeVisible();
   await expect(main.getByRole("button", { name: "Member List" })).toBeVisible();
-  await expect(main.getByRole("button", { name: "Officers" })).toBeVisible();
+  await expect(main.getByRole("button", { name: "Officers", exact: true })).toBeVisible();
   await expect(main.getByRole("button", { name: "Knight and Family of the Month" })).toBeVisible();
   await expect(main.getByRole("button", { name: "Meeting Minutes" })).toBeVisible();
 });
@@ -151,7 +151,7 @@ test("meeting minutes two-level navigation", async ({ page }) => {
 test("non-officer does not see Email Members or Download Members buttons", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Members Login" }).click();
-  await page.getByLabel("Membership Number").fill("8301004");
+  await page.getByLabel("Membership Number").fill("8301015");
   await page.getByLabel("Passcode").fill("hope830");
   await page.getByRole("button", { name: "Sign In" }).click();
 
@@ -205,7 +205,7 @@ test("form submissions show success modal and reset on dismiss", async ({ page }
 test("non-officer does not see Calendar Updates entry in members area", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Members Login" }).click();
-  await page.getByLabel("Membership Number").fill("8301004");
+  await page.getByLabel("Membership Number").fill("8301015");
   await page.getByLabel("Passcode").fill("hope830");
   await page.getByRole("button", { name: "Sign In" }).click();
   await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
@@ -326,7 +326,7 @@ test("officer sees Calendar Updates entry and can open the officer calendar view
 test("non-officer does not see Edit Announcements entry in members area", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Members Login" }).click();
-  await page.getByLabel("Membership Number").fill("8301004");
+  await page.getByLabel("Membership Number").fill("8301015");
   await page.getByLabel("Passcode").fill("hope830");
   await page.getByRole("button", { name: "Sign In" }).click();
   await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
@@ -489,7 +489,7 @@ test("announcement with deleteDate=today is still visible in the public News vie
 test("non-officer does not see Edit Photo Gallery entry in members area", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Members Login" }).click();
-  await page.getByLabel("Membership Number").fill("8301004");
+  await page.getByLabel("Membership Number").fill("8301015");
   await page.getByLabel("Passcode").fill("hope830");
   await page.getByRole("button", { name: "Sign In" }).click();
   await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
@@ -630,4 +630,66 @@ test("logout returns to login form", async ({ page }) => {
 
   await page.getByRole("button", { name: "Logout" }).click();
   await expect(page.getByRole("heading", { name: "Members Login" })).toBeVisible();
+});
+
+test("privileged officer sees Update Officers and can open the view", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301001");
+  await page.getByLabel("Passcode").fill("faith830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
+  await page.getByRole("main").getByRole("button", { name: "Update Officers" }).click();
+  await expect(page.getByRole("heading", { name: "Update Officers" })).toBeVisible();
+  await expect(page.getByText("Grand Knight", { exact: true })).toBeVisible();
+  await expect(page.getByText("Treasurer")).toBeVisible();
+  const editButtons = page.getByRole("button", { name: "Edit" });
+  await expect(editButtons.first()).toBeVisible();
+});
+
+test("non-privileged officer does not see Update Officers button", async ({ page }) => {
+  // 8301002 is Grand Knight (privileged), but 8301003 is Chancellor (non-privileged)
+  // Chancellor has no passcode in seed, so use 8301015 (non-officer) for this test
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301015");
+  await page.getByLabel("Passcode").fill("hope830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page.getByRole("heading", { name: "Members Area" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("button", { name: "Update Officers" })).toHaveCount(0);
+});
+
+test("Update Officers edit flow opens modal and shows member dropdown", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301001");
+  await page.getByLabel("Passcode").fill("faith830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Update Officers" }).click();
+  await expect(page.getByRole("heading", { name: "Update Officers" })).toBeVisible();
+
+  // Click Edit on the first officer card
+  await page.getByRole("button", { name: "Edit" }).first().click();
+  const modal = page.locator("div.fixed");
+  await expect(modal.getByRole("heading")).toContainText("Edit Grand Knight");
+  await expect(page.getByText(/Only PNG formatted photos are allowed/)).toBeVisible();
+
+  // Focus the member input to open dropdown
+  await page.getByPlaceholder("Type to search members...").click();
+  await expect(page.getByText("Huckestein, James")).toBeVisible();
+
+  // Click the modal heading to close the dropdown, then cancel
+  await modal.getByRole("heading").click();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("heading", { name: "Update Officers" })).toBeVisible();
+});
+
+test("public Officers view fetches from backend API", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Council navigation" }).getByRole("button", { name: "Officers" }).click();
+  await expect(page.getByRole("heading", { name: "Officers" })).toBeVisible();
+  await expect(page.getByText("Grand Knight", { exact: true })).toBeVisible();
+  await expect(page.getByText("John Akers")).toBeVisible();
+  await expect(page.getByText("Financial Secretary")).toBeVisible();
 });

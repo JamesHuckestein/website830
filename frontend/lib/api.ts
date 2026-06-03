@@ -291,6 +291,29 @@ export async function deletePhoto(
   });
 }
 
+export type OfficerResponse = {
+  title: string;
+  name: string;
+  photoUrl: string;
+};
+
+export async function getOfficers(): Promise<OfficerResponse[]> {
+  const res = await fetch(`${API_BASE}/officers`);
+  if (!res.ok) throw new Error(`API ${res.status}: /officers`);
+  return res.json() as Promise<OfficerResponse[]>;
+}
+
+export async function updateOfficer(
+  token: string,
+  title: string,
+  body: { memberNumber: string; photoData: string; photoFilename: string },
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/officers/${encodeURIComponent(title)}`, token, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
 export async function getMeetingMinutes(token: string): Promise<MeetingMinutesSummary[]> {
   return apiFetch<MeetingMinutesSummary[]>("/meeting-minutes", token);
 }

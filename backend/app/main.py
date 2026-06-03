@@ -1,3 +1,4 @@
+import base64
 import csv
 import io
 import logging
@@ -8,17 +9,19 @@ from datetime import date, datetime, time, timedelta, timezone
 
 import httpx
 import jwt
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 
 from app.seed import (
+    OFFICER_TITLES_ORDERED,
     announcements_store,
     events_store,
     meeting_minutes_store,
     members_store,
+    officers_store,
     photos_store,
     prayer_requests_store,
 )
@@ -44,6 +47,8 @@ OFFICER_TITLES = {
     "Trustee - 1 Year", "Trustee - 2 Year", "Trustee - 3 Year",
     "Financial Secretary", "Lecturer",
 }
+
+PRIVILEGED_OFFICER_TITLES = {"Grand Knight", "Deputy Grand Knight", "Recorder", "Financial Secretary"}
 
 _bearer = HTTPBearer()
 
@@ -185,6 +190,12 @@ class PhotoUpdate(_PhotoBody):
     pass
 
 
+class OfficerUpdateRequest(BaseModel):
+    memberNumber: str = Field(min_length=1)
+    photoData: str = Field(min_length=1)
+    photoFilename: str = Field(min_length=1)
+
+
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
@@ -199,6 +210,15 @@ def _require_auth(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) 
 def _require_officer(payload: dict = Depends(_require_auth)) -> dict:
     if not payload.get("isOfficer"):
         raise HTTPException(status_code=403, detail="Officer access required")
+    return payload
+
+
+def _require_privileged_officer(payload: dict = Depends(_require_auth)) -> dict:
+    if payload.get("officerPosition") not in PRIVILEGED_OFFICER_TITLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Only Grand Knight, Deputy Grand Knight, Recorder, or Financial Secretary may update officers.",
+        )
     return payload
 
 
@@ -240,6 +260,9 @@ _announcements_lock = threading.Lock()
 
 # Same protection for the photos store.
 _photos_lock = threading.Lock()
+
+# Same protection for the officers store.
+_officers_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +375,11 @@ def login(body: LoginRequest):
     if member is None or member.get("passcode") != body.passcode:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = jwt.encode(
-        {"sub": member["member_number"], "isOfficer": _is_officer(member.get("officer_position"))},
+        {
+            "sub": member["member_number"],
+            "isOfficer": _is_officer(member.get("officer_position")),
+            "officerPosition": member.get("officer_position"),
+        },
         _JWT_SECRET,
         algorithm=_JWT_ALGORITHM,
     )
@@ -651,6 +678,67 @@ def delete_photo(photo_id: str, _payload: dict = Depends(_require_officer)):
                 photos_store.pop(i)
                 return {"success": True, "message": "Photo deleted."}
     raise HTTPException(status_code=404, detail="Photo not found.")
+
+
+@app.get("/officers")
+def get_officers(request: Request):
+    """List the current officer roster.
+
+    Public (no auth). Returns officers in the canonical title order defined by
+    OFFICER_TITLES_ORDERED. Photos that have been uploaded are served from the
+    backend; their URLs are returned as absolute paths using the request's base.
+    """
+    base = str(request.base_url).rstrip("/")
+    result = []
+    for o in officers_store:
+        if o.get("photo_data"):
+            photo_url = f"{base}{o['photo_url']}"
+        else:
+            photo_url = o["photo_url"]
+        result.append({"title": o["title"], "name": o["name"], "photoUrl": photo_url})
+    return result
+
+
+@app.put("/officers/{title}")
+def update_officer(title: str, body: OfficerUpdateRequest, payload: dict = Depends(_require_privileged_officer)):
+    if title not in OFFICER_TITLES:
+        raise HTTPException(status_code=404, detail="Officer title not found.")
+    member = next((m for m in members_store if m["member_number"] == body.memberNumber), None)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found.")
+    try:
+        photo_bytes = __import__("base64").b64decode(body.photoData)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid base64 photo data.")
+    if photo_bytes[:4] != b"\x89PNG":
+        raise HTTPException(status_code=422, detail="Only PNG photos are allowed.")
+    with _officers_lock:
+        officer_entry = next((o for o in officers_store if o["title"] == title), None)
+        if officer_entry is None:
+            raise HTTPException(status_code=404, detail="Officer title not found.")
+        old_member_number = officer_entry["member_number"]
+        if old_member_number and old_member_number != body.memberNumber:
+            old_member = next((m for m in members_store if m["member_number"] == old_member_number), None)
+            if old_member:
+                old_member["officer_position"] = None
+        member["officer_position"] = title
+        slug = title.lower().replace(" ", "-").replace("---", "-")
+        officer_entry["member_number"] = body.memberNumber
+        officer_entry["name"] = f"{member['first_name']} {member['last_name']}"
+        officer_entry["photo_url"] = f"/officers/photos/{slug}.png"
+        officer_entry["photo_data"] = body.photoData
+    return {"success": True, "message": "Officer updated."}
+
+
+@app.get("/officers/photos/{filename}")
+def get_officer_photo(filename: str):
+    slug = filename.removesuffix(".png")
+    for o in officers_store:
+        entry_slug = o["title"].lower().replace(" ", "-").replace("---", "-")
+        if entry_slug == slug and o.get("photo_data"):
+            photo_bytes = base64.b64decode(o["photo_data"])
+            return Response(content=photo_bytes, media_type="image/png")
+    raise HTTPException(status_code=404, detail="Officer photo not found.")
 
 
 @app.post("/emails/officer")

@@ -82,12 +82,25 @@ PhotoFormModal           — officer form: Title (required, ≤200), Upload Phot
                            helper text; Save / Cancel; `submitting` prop disables both and
                            shows "Saving...". Phase 2 takes a URL string — real drag-and-drop
                            upload + S3 storage is deferred to a future phase.
+
+OfficersUpdate           — privileged-officer-only members sub-section
+                           (memberSubSection === "updateOfficers")
+                           props: { token, onBack }; fetches GET /officers; renders officer
+                           cards in a 2-column grid with an "Edit" button at the bottom of
+                           each card; clicking Edit opens OfficerEditModal for that title;
+                           re-fetches after successful save; uses SubmitModal for response
+OfficerEditModal         — privileged-officer form: Member Name (required, searchable
+                           dropdown populated by getMembers), Upload Photo (required,
+                           <input type="file" accept=".png,image/png">, PNG only);
+                           Save / Cancel; `submitting` prop disables both and shows "Saving...";
+                           helper text: "Please select a Member from the list and a valid
+                           photo to upload. Only PNG formatted photos are allowed."
 ```
 
 ## Data & Auth
 
 `data/siteData.ts` — single source of truth for all content:
-- Types: `SectionId` (union), `NavItem`, `Officer`, `MemberSubSection` (includes `"calendarUpdates"`, `"announcementsUpdate"`, and `"editPhotoGallery"`)
+- Types: `SectionId` (union), `NavItem`, `Officer`, `MemberSubSection` (includes `"calendarUpdates"`, `"announcementsUpdate"`, `"editPhotoGallery"`, and `"updateOfficers"`)
 - Exports: `councilInfo`, `aboutCouncilDetails`, `navItems`, `officers[]`, `sectionContent`
 - Note: the `events`, `news`, and `photos` SectionIds are no longer in `sectionContent` — they render `<Calendar />`, `<News />`, and `<PhotoGallery />` directly from `MainPanel`.
 
@@ -98,6 +111,7 @@ PhotoFormModal           — officer form: Title (required, ≤200), Upload Phot
 - Events (calendar): `getEvents(month?)`, `createEvent`, `updateEvent`, `deleteEvent` — write methods require an officer JWT; backend enforces the 3-events-per-day cap with HTTP 409 Conflict.
 - Announcements (news): `getAnnouncements()`, `createAnnouncement`, `updateAnnouncement`, `deleteAnnouncement` — `getAnnouncements` is public and pre-sorted newest-first; backend filters out rows where `delete_date < today`. Write methods require an officer JWT and reject past `delete_date` values with HTTP 422.
 - Photos (gallery): `getPhotos()`, `createPhoto`, `updatePhoto`, `deletePhoto` — `getPhotos` is public and pre-sorted oldest-first (so the newest photo lands at the bottom of the two-column grid). Write methods require an officer JWT; payload is `{ title (≤200), photoUrl (≤2048) }`.
+- Officers: `getOfficers()` (public, returns roster sorted by title order), `updateOfficer(token, title, { memberNumber, photoData, photoFilename })` — write requires a privileged officer JWT (GK, DGK, Recorder, FS); backend validates PNG format.
 
 `lib/auth.ts` — `authenticateMember(membershipNumber, passcode): boolean`
 - Demo credentials: `{ "8301001": "faith830", "8301002": "charity830" }`

@@ -50,6 +50,8 @@ The `news` SectionId renders a live `<News />` (no longer a static `sectionConte
 
 The `photos` SectionId renders a live `<PhotoGallery />` (no longer a static `sectionContent` blurb): a two-column grid of photo cards sorted oldest-first (newest at the bottom), non-interactive on the public side. Officers see an additional "Edit Photo Gallery" entry in the members area for Add/Edit/Delete. In Phase 2 the form takes a `photoUrl` text field — real drag-and-drop file upload + S3 storage is deferred to a future phase tied to the AWS cutover. See `docs/Photo-Gallery2.md` for the phased rollout.
 
+The `updateOfficers` MemberSubSection renders `<OfficersUpdate />` — visible only to Grand Knight, Deputy Grand Knight, Recorder, and Financial Secretary. It shows the current officer roster with Edit buttons; clicking Edit opens `<OfficerEditModal />` with a searchable member name dropdown and a PNG-only file upload. Changes are persisted via `PUT /officers/{title}` (privileged auth) and reflected on both the public Officers grid and Members-Only Officers view, which both fetch from `GET /officers` (public, no auth). The static `officers[]` array in `siteData.ts` is seed data only. See `docs/Update-Officers2.md` for the full phased plan.
+
 See `frontend/CLAUDE.md` for full component contracts, data shapes, and testing details.
 
 ## Conventions
