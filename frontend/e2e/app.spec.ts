@@ -693,3 +693,146 @@ test("public Officers view fetches from backend API", async ({ page }) => {
   await expect(page.getByText("John Akers")).toBeVisible();
   await expect(page.getByText("Financial Secretary")).toBeVisible();
 });
+
+test("privileged officer sees Add/Edit/Delete on Member List", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301001");
+  await page.getByLabel("Passcode").fill("faith830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Member List" }).click();
+  await expect(page.getByRole("heading", { name: "Member List" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
+});
+
+test("Recorder (privileged officer) sees Add/Edit/Delete on Member List", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301013");
+  await page.getByLabel("Passcode").fill("recorder830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Member List" }).click();
+  await expect(page.getByRole("heading", { name: "Member List" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
+});
+
+test("regular member does NOT see Add/Edit/Delete on Member List", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301015");
+  await page.getByLabel("Passcode").fill("hope830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Member List" }).click();
+  await expect(page.getByRole("heading", { name: "Member List" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add" })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit" })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete" })).not.toBeVisible();
+});
+
+test("Member List search filters results", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301001");
+  await page.getByLabel("Passcode").fill("faith830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Member List" }).click();
+  await expect(page.getByRole("heading", { name: "Member List" })).toBeVisible();
+  await expect(page.getByText("James Huckestein")).toBeVisible();
+
+  await page.getByPlaceholder("Search by name...").fill("Akers");
+  await expect(page.getByText("John Akers")).toBeVisible();
+  await expect(page.getByText("James Huckestein")).not.toBeVisible();
+});
+
+test("privileged officer can add a new member via the form", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301001");
+  await page.getByLabel("Passcode").fill("faith830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Member List" }).click();
+  await expect(page.getByRole("heading", { name: "Member List" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Add" }).click();
+  await expect(page.getByRole("heading", { name: "Add Member" })).toBeVisible();
+
+  await page.getByLabel("Member Number *").fill("8309999");
+  await page.getByLabel("Password *").fill("testpass");
+  await page.getByLabel("First Name *").fill("Test");
+  await page.getByLabel("Last Name *").fill("NewMember");
+  await page.getByLabel("Street Address *").fill("100 Main St");
+  await page.getByLabel("City *").fill("Dallas");
+  await page.getByLabel("State *").fill("TX");
+  await page.getByLabel("Zip Code *").fill("75001");
+  await page.getByLabel("Birthday *").fill("1990-05-20");
+  await page.getByLabel("1st Degree Date *").fill("2020-01-01");
+  await page.getByLabel("2nd Degree Date *").fill("2020-03-01");
+  await page.getByLabel("3rd Degree Date *").fill("2020-05-01");
+
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await expect(page.getByText("Member added successfully.")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+
+  await expect(page.getByText("Test NewMember")).toBeVisible();
+});
+
+test("privileged officer can edit an existing member", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301001");
+  await page.getByLabel("Passcode").fill("faith830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Member List" }).click();
+  await expect(page.getByRole("heading", { name: "Member List" })).toBeVisible();
+
+  // Select Thomas Wilson row
+  await page.getByText("Thomas Wilson").click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByRole("heading", { name: "Edit Member" })).toBeVisible();
+
+  // Change first name
+  await page.getByLabel("First Name *").clear();
+  await page.getByLabel("First Name *").fill("Tommy");
+
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await expect(page.getByText("Member updated successfully.")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+
+  await expect(page.getByText("Tommy Wilson")).toBeVisible();
+});
+
+test("privileged officer can delete a member", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Members Login" }).click();
+  await page.getByLabel("Membership Number").fill("8301001");
+  await page.getByLabel("Passcode").fill("faith830");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await page.getByRole("main").getByRole("button", { name: "Member List" }).click();
+  await expect(page.getByRole("heading", { name: "Member List" })).toBeVisible();
+
+  // Select David Martinez row
+  await page.getByText("David Martinez").click();
+  await page.getByRole("button", { name: "Delete" }).first().click();
+  const confirmDialog = page.locator(".fixed.inset-0.z-50");
+  await expect(confirmDialog.getByText("Are you sure you want to delete David Martinez from the member list?")).toBeVisible();
+
+  await confirmDialog.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("heading", { name: "Success" })).toBeVisible();
+  await expect(page.getByText("Member deleted successfully.")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+
+  await expect(page.getByText("David Martinez")).not.toBeVisible();
+});

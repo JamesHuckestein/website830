@@ -88,7 +88,7 @@ export function MainPanel({
       return <PrayerRequests token={token!} memberNumber={memberNumber!} isOfficer={isOfficer} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "memberList") {
-      return <MemberList token={token!} isOfficer={isOfficer} onBack={onBackToMembersArea} />;
+      return <MemberList token={token!} isOfficer={isOfficer} officerPosition={officerPosition} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "officers") {
       return <OfficerContacts token={token!} onBack={onBackToMembersArea} />;

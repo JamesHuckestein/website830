@@ -90,7 +90,14 @@ async function apiFetch<T>(path: string, token: string, init?: RequestInit): Pro
     let detail = "";
     try {
       const body = await res.json();
-      if (typeof body?.detail === "string") detail = body.detail;
+      if (typeof body?.detail === "string") {
+        detail = body.detail;
+      } else if (Array.isArray(body?.detail)) {
+        detail = body.detail.map((e: { msg?: string; loc?: string[] }) => {
+          const field = e.loc?.slice(-1)[0] ?? "";
+          return field ? `${field}: ${e.msg}` : (e.msg ?? "");
+        }).filter(Boolean).join("; ");
+      }
     } catch {
       // non-JSON error body — fall through to generic message
     }
@@ -138,6 +145,45 @@ export async function exportMembersCSV(token: string): Promise<Blob> {
   });
   if (!res.ok) throw new Error("Export failed");
   return res.blob();
+}
+
+export type MemberFormData = {
+  memberNumber: string;
+  passcode: string | null;
+  firstName: string;
+  lastName: string;
+  addressStreet: string;
+  addressCity: string;
+  addressState: string;
+  addressZip: string;
+  phone: string;
+  birthday: string;
+  email: string;
+  assemblyNumber: string | null;
+  firstDegreeDate: string;
+  secondDegreeDate: string;
+  thirdDegreeDate: string;
+  fourthDegreeDate: string | null;
+};
+
+export async function createMember(token: string, data: MemberFormData): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>("/members", token, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateMemberFull(token: string, memberId: string, data: MemberFormData): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/members/${memberId}/full`, token, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteMember(token: string, memberId: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/members/${memberId}`, token, {
+    method: "DELETE",
+  });
 }
 
 export async function getPrayerRequests(token: string): Promise<PrayerRequest[]> {

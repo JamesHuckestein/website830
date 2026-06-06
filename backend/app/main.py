@@ -196,6 +196,52 @@ class OfficerUpdateRequest(BaseModel):
     photoFilename: str = Field(min_length=1)
 
 
+class _MemberBody(BaseModel):
+    memberNumber: str = Field(pattern=r"^830\d{4}$")
+    firstName: str = Field(min_length=1)
+    lastName: str = Field(min_length=1)
+    addressStreet: str = Field(min_length=1)
+    addressCity: str = Field(min_length=1)
+    addressState: str = Field(min_length=1, max_length=2)
+    addressZip: str = Field(min_length=5, max_length=10)
+    phone: str = ""
+    birthday: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    email: str = ""
+    assemblyNumber: str | None = None
+    firstDegreeDate: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    secondDegreeDate: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    thirdDegreeDate: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    fourthDegreeDate: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+    @field_validator("birthday", "firstDegreeDate", "secondDegreeDate", "thirdDegreeDate")
+    @classmethod
+    def _validate_required_date(cls, v: str) -> str:
+        try:
+            date.fromisoformat(v)
+        except ValueError as e:
+            raise ValueError("must be a real calendar date in YYYY-MM-DD format") from e
+        return v
+
+    @field_validator("fourthDegreeDate")
+    @classmethod
+    def _validate_optional_date(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        try:
+            date.fromisoformat(v)
+        except ValueError as e:
+            raise ValueError("must be a real calendar date in YYYY-MM-DD format") from e
+        return v
+
+
+class CreateMemberRequest(_MemberBody):
+    passcode: str = Field(min_length=1)
+
+
+class UpdateMemberFullRequest(_MemberBody):
+    passcode: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
@@ -263,6 +309,9 @@ _photos_lock = threading.Lock()
 
 # Same protection for the officers store.
 _officers_lock = threading.Lock()
+
+# Same protection for the members store.
+_members_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +486,82 @@ def update_member(member_id: str, body: UpdateContactRequest, _payload: dict = D
     member["phone"] = body.phone
     member["email"] = body.email
     return {"success": True, "message": "Contact information updated."}
+
+
+@app.post("/members", status_code=201)
+def create_member(body: CreateMemberRequest, _payload: dict = Depends(_require_privileged_officer)):
+    with _members_lock:
+        existing = next((m for m in members_store if m["member_number"] == body.memberNumber), None)
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="A member with that number already exists.")
+        members_store.append({
+            "member_number": body.memberNumber,
+            "passcode": body.passcode,
+            "first_name": body.firstName,
+            "last_name": body.lastName,
+            "address_street": body.addressStreet,
+            "address_city": body.addressCity,
+            "address_state": body.addressState,
+            "address_zip": body.addressZip,
+            "phone": body.phone,
+            "birthday": body.birthday,
+            "email": body.email,
+            "officer_position": None,
+            "assembly_number": body.assemblyNumber,
+            "first_degree_date": body.firstDegreeDate,
+            "second_degree_date": body.secondDegreeDate,
+            "third_degree_date": body.thirdDegreeDate,
+            "fourth_degree_date": body.fourthDegreeDate,
+        })
+    return {"success": True, "message": "Member added successfully."}
+
+
+@app.put("/members/{member_id}/full")
+def update_member_full(member_id: str, body: UpdateMemberFullRequest, _payload: dict = Depends(_require_privileged_officer)):
+    with _members_lock:
+        member = next((m for m in members_store if m["member_number"] == member_id), None)
+        if member is None:
+            raise HTTPException(status_code=404, detail="Member not found")
+        if body.memberNumber != member_id:
+            conflict = next((m for m in members_store if m["member_number"] == body.memberNumber), None)
+            if conflict is not None:
+                raise HTTPException(status_code=409, detail="A member with that number already exists.")
+        member["member_number"] = body.memberNumber
+        member["first_name"] = body.firstName
+        member["last_name"] = body.lastName
+        member["address_street"] = body.addressStreet
+        member["address_city"] = body.addressCity
+        member["address_state"] = body.addressState
+        member["address_zip"] = body.addressZip
+        member["phone"] = body.phone
+        member["birthday"] = body.birthday
+        member["email"] = body.email
+        member["assembly_number"] = body.assemblyNumber
+        member["first_degree_date"] = body.firstDegreeDate
+        member["second_degree_date"] = body.secondDegreeDate
+        member["third_degree_date"] = body.thirdDegreeDate
+        member["fourth_degree_date"] = body.fourthDegreeDate
+        if body.passcode:
+            member["passcode"] = body.passcode
+    return {"success": True, "message": "Member updated successfully."}
+
+
+@app.delete("/members/{member_id}")
+def delete_member(member_id: str, _payload: dict = Depends(_require_privileged_officer)):
+    with _members_lock:
+        idx = next((i for i, m in enumerate(members_store) if m["member_number"] == member_id), None)
+        if idx is None:
+            raise HTTPException(status_code=404, detail="Member not found")
+        removed = members_store.pop(idx)
+    if removed.get("officer_position"):
+        with _officers_lock:
+            for officer in officers_store:
+                if officer.get("member_number") == member_id:
+                    officer["member_number"] = None
+                    officer["name"] = None
+                    officer["imageUrl"] = "/images/officers/default.png"
+                    break
+    return {"success": True, "message": "Member deleted successfully."}
 
 
 @app.get("/prayer-requests")

@@ -57,6 +57,13 @@ export const OFFICER_TITLES = [
 
 export type OfficerTitle = (typeof OFFICER_TITLES)[number];
 
+export const PRIVILEGED_OFFICER_TITLES = new Set([
+  "Grand Knight",
+  "Deputy Grand Knight",
+  "Recorder",
+  "Financial Secretary",
+]);
+
 export function isOfficerTitle(title: string | null): title is OfficerTitle {
   return OFFICER_TITLES.includes(title as OfficerTitle);
 }

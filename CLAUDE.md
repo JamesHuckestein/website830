@@ -52,6 +52,8 @@ The `photos` SectionId renders a live `<PhotoGallery />` (no longer a static `se
 
 The `updateOfficers` MemberSubSection renders `<OfficersUpdate />` — visible only to Grand Knight, Deputy Grand Knight, Recorder, and Financial Secretary. It shows the current officer roster with Edit buttons; clicking Edit opens `<OfficerEditModal />` with a searchable member name dropdown and a PNG-only file upload. Changes are persisted via `PUT /officers/{title}` (privileged auth) and reflected on both the public Officers grid and Members-Only Officers view, which both fetch from `GET /officers` (public, no auth). The static `officers[]` array in `siteData.ts` is seed data only. See `docs/Update-Officers2.md` for the full phased plan.
 
+The `memberList` MemberSubSection renders `<MemberList />` — visible to all logged-in members. It includes a search-by-name filter, a scrollable container (max 25 rows visible), and Email/Download buttons for officers. Privileged officers (Grand Knight, Deputy Grand Knight, Recorder, Financial Secretary) additionally see Add/Edit/Delete buttons and can click rows to select them. Add/Edit opens `<MemberFormModal />` with all configurable member fields; Delete opens a `<ConfirmDialog />`. Changes are persisted via `POST /members`, `PUT /members/{id}/full`, and `DELETE /members/{id}` (all privileged auth). The `officer_position` field is not editable via this form. See `docs/Update-Members2.md` for the full phased plan.
+
 See `frontend/CLAUDE.md` for full component contracts, data shapes, and testing details.
 
 ## Conventions

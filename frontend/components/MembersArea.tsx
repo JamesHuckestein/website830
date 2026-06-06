@@ -1,11 +1,4 @@
-import type { MemberSubSection } from "@/data/siteData";
-
-const PRIVILEGED_OFFICER_TITLES = new Set([
-  "Grand Knight",
-  "Deputy Grand Knight",
-  "Recorder",
-  "Financial Secretary",
-]);
+import { PRIVILEGED_OFFICER_TITLES, type MemberSubSection } from "@/data/siteData";
 
 type MembersAreaProps = {
   isOfficer: boolean;
