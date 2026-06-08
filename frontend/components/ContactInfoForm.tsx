@@ -24,12 +24,12 @@ export function ContactInfoForm({ token, memberNumber, onBack }: ContactInfoForm
   useEffect(() => {
     getMember(token, memberNumber).then((m) => {
       setMember(m);
-      setAddressStreet(m.addressStreet);
-      setAddressCity(m.addressCity);
-      setAddressState(m.addressState);
-      setAddressZip(m.addressZip);
-      setPhone(m.phone);
-      setEmail(m.email);
+      setAddressStreet(m.addressStreet ?? "");
+      setAddressCity(m.addressCity ?? "");
+      setAddressState(m.addressState ?? "");
+      setAddressZip(m.addressZip ?? "");
+      setPhone(m.phone ?? "");
+      setEmail(m.email ?? "");
     }).catch(() => {});
   }, [token, memberNumber]);
 

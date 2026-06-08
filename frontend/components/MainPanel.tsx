@@ -1,3 +1,4 @@
+import { AdminPasswordForm } from "@/components/AdminPasswordForm";
 import { AnnouncementsUpdate } from "@/components/AnnouncementsUpdate";
 import { BirthdayList } from "@/components/BirthdayList";
 import { Calendar } from "@/components/Calendar";
@@ -29,6 +30,7 @@ type MainPanelProps = {
   activeSection: SectionId;
   isLoggedIn: boolean;
   isOfficer: boolean;
+  isAdmin: boolean;
   officerPosition: string | null;
   token: string | null;
   memberNumber: string | null;
@@ -47,6 +49,7 @@ export function MainPanel({
   activeSection,
   isLoggedIn,
   isOfficer,
+  isAdmin,
   officerPosition,
   token,
   memberNumber,
@@ -88,7 +91,7 @@ export function MainPanel({
       return <PrayerRequests token={token!} memberNumber={memberNumber!} isOfficer={isOfficer} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "memberList") {
-      return <MemberList token={token!} isOfficer={isOfficer} officerPosition={officerPosition} onBack={onBackToMembersArea} />;
+      return <MemberList token={token!} isOfficer={isOfficer} isAdmin={isAdmin} officerPosition={officerPosition} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "officers") {
       return <OfficerContacts token={token!} onBack={onBackToMembersArea} />;
@@ -119,10 +122,14 @@ export function MainPanel({
     if (memberSubSection === "updateOfficers" && isOfficer) {
       return <OfficersUpdate token={token!} onBack={onBackToMembersArea} />;
     }
+    if (memberSubSection === "adminPassword" && isAdmin) {
+      return <AdminPasswordForm token={token!} onBack={onBackToMembersArea} />;
+    }
 
     return (
       <MembersArea
         isOfficer={isOfficer}
+        isAdmin={isAdmin}
         officerPosition={officerPosition}
         onSelect={onSelectMemberSubSection}
         onLogout={onLogout}

@@ -24,6 +24,29 @@ OFFICER_TITLES_ORDERED = [
     "Lecturer",
 ]
 
+ADMIN_MEMBER_NUMBER = "830999999"
+
+_ADMIN_RECORD: dict = {
+    "member_number": ADMIN_MEMBER_NUMBER,
+    "first_name": "Admin",
+    "last_name": "Account",
+    "address_street": None,
+    "address_city": None,
+    "address_state": None,
+    "address_zip": None,
+    "phone": None,
+    "birthday": None,
+    "officer_position": None,
+    "email": "",
+    "assembly_number": None,
+    "first_degree_date": None,
+    "second_degree_date": None,
+    "third_degree_date": None,
+    "fourth_degree_date": None,
+    "passcode": "JesusisLord1!",
+    "is_admin": True,
+}
+
 _OFFICER_PHOTO_MAP: dict[str, str] = {
     "Grand Knight": "/officers/john-h-akers.png",
     "Deputy Grand Knight": "/officers/james-h.png",
@@ -65,6 +88,7 @@ def _build_officers_store(members: list[dict]) -> list[dict]:
 
 # Mutable in-memory stores — mutated by PUT/POST endpoints at runtime
 members_store: list[dict] = copy.deepcopy(_ORIGINAL["members"])
+members_store.append(copy.deepcopy(_ADMIN_RECORD))
 prayer_requests_store: list[dict] = copy.deepcopy(_ORIGINAL["prayer_requests"])
 meeting_minutes_store: list[dict] = copy.deepcopy(_ORIGINAL["meeting_minutes"])
 events_store: list[dict] = copy.deepcopy(_ORIGINAL["events"])
@@ -77,6 +101,7 @@ def reset_to_seed() -> None:
     """Restore all stores to the original seed data. Used by tests."""
     members_store.clear()
     members_store.extend(copy.deepcopy(_ORIGINAL["members"]))
+    members_store.append(copy.deepcopy(_ADMIN_RECORD))
     prayer_requests_store.clear()
     prayer_requests_store.extend(copy.deepcopy(_ORIGINAL["prayer_requests"]))
     meeting_minutes_store.clear()

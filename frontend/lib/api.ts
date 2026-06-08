@@ -388,3 +388,10 @@ export async function emailAllMembers(token: string, message: string): Promise<{
     body: JSON.stringify({ message }),
   });
 }
+
+export async function updateAdminPassword(token: string, passcode: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>("/admin/password", token, {
+    method: "PUT",
+    body: JSON.stringify({ passcode }),
+  });
+}

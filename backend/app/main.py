@@ -16,6 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 
 from app.seed import (
+    ADMIN_MEMBER_NUMBER,
     OFFICER_TITLES_ORDERED,
     announcements_store,
     events_store,
@@ -242,6 +243,10 @@ class UpdateMemberFullRequest(_MemberBody):
     passcode: str | None = None
 
 
+class AdminPasswordUpdateRequest(BaseModel):
+    passcode: str = Field(min_length=1)
+
+
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
@@ -260,6 +265,8 @@ def _require_officer(payload: dict = Depends(_require_auth)) -> dict:
 
 
 def _require_privileged_officer(payload: dict = Depends(_require_auth)) -> dict:
+    if payload.get("isAdmin"):
+        return payload
     if payload.get("officerPosition") not in PRIVILEGED_OFFICER_TITLES:
         raise HTTPException(
             status_code=403,
@@ -270,6 +277,10 @@ def _require_privileged_officer(payload: dict = Depends(_require_auth)) -> dict:
 
 def _is_officer(officer_position: str | None) -> bool:
     return officer_position in OFFICER_TITLES
+
+
+def _is_admin_member(m: dict) -> bool:
+    return m.get("is_admin", False)
 
 
 def _today() -> date:
@@ -397,6 +408,8 @@ def _upcoming_birthdays(days: int = 30) -> list[dict]:
     cutoff = today + timedelta(days=days)
     result = []
     for m in members_store:
+        if not m.get("birthday"):
+            continue
         bday = date.fromisoformat(m["birthday"])
         for year in (today.year, today.year + 1):
             try:
@@ -423,11 +436,13 @@ def login(body: LoginRequest):
     member = next((m for m in members_store if m["member_number"] == body.membershipNumber), None)
     if member is None or member.get("passcode") != body.passcode:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    is_admin = member.get("is_admin", False)
     token = jwt.encode(
         {
             "sub": member["member_number"],
-            "isOfficer": _is_officer(member.get("officer_position")),
+            "isOfficer": _is_officer(member.get("officer_position")) or is_admin,
             "officerPosition": member.get("officer_position"),
+            "isAdmin": is_admin,
         },
         _JWT_SECRET,
         algorithm=_JWT_ALGORITHM,
@@ -437,7 +452,7 @@ def login(body: LoginRequest):
 
 @app.get("/members/birthdays")
 def get_birthdays(_payload: dict = Depends(_require_auth)):
-    return [_member_to_response(m) for m in _upcoming_birthdays()]
+    return [_member_to_response(m) for m in _upcoming_birthdays() if not _is_admin_member(m)]
 
 
 @app.get("/members/export-csv")
@@ -452,7 +467,8 @@ def export_members_csv(_payload: dict = Depends(_require_officer)):
     writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
     writer.writeheader()
     for m in members_store:
-        writer.writerow(_member_to_response(m))
+        if not _is_admin_member(m):
+            writer.writerow(_member_to_response(m))
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
@@ -463,13 +479,15 @@ def export_members_csv(_payload: dict = Depends(_require_officer)):
 
 @app.get("/members")
 def get_members(_payload: dict = Depends(_require_auth)):
-    return [_member_to_response(m) for m in members_store]
+    return [_member_to_response(m) for m in members_store if not _is_admin_member(m)]
 
 
 @app.get("/members/{member_id}")
 def get_member(member_id: str, _payload: dict = Depends(_require_auth)):
     member = next((m for m in members_store if m["member_number"] == member_id), None)
     if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if _is_admin_member(member) and not _payload.get("isAdmin"):
         raise HTTPException(status_code=404, detail="Member not found")
     return _member_to_response(member)
 
@@ -479,6 +497,8 @@ def update_member(member_id: str, body: UpdateContactRequest, _payload: dict = D
     member = next((m for m in members_store if m["member_number"] == member_id), None)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
+    if _is_admin_member(member) and not _payload.get("isAdmin"):
+        raise HTTPException(status_code=403, detail="Cannot modify admin account.")
     member["address_street"] = body.addressStreet
     member["address_city"] = body.addressCity
     member["address_state"] = body.addressState
@@ -522,6 +542,8 @@ def update_member_full(member_id: str, body: UpdateMemberFullRequest, _payload: 
         member = next((m for m in members_store if m["member_number"] == member_id), None)
         if member is None:
             raise HTTPException(status_code=404, detail="Member not found")
+        if _is_admin_member(member) and not _payload.get("isAdmin"):
+            raise HTTPException(status_code=403, detail="Cannot modify admin account.")
         if body.memberNumber != member_id:
             conflict = next((m for m in members_store if m["member_number"] == body.memberNumber), None)
             if conflict is not None:
@@ -552,6 +574,8 @@ def delete_member(member_id: str, _payload: dict = Depends(_require_privileged_o
         idx = next((i for i, m in enumerate(members_store) if m["member_number"] == member_id), None)
         if idx is None:
             raise HTTPException(status_code=404, detail="Member not found")
+        if _is_admin_member(members_store[idx]):
+            raise HTTPException(status_code=403, detail="Cannot delete admin account.")
         removed = members_store.pop(idx)
     if removed.get("officer_position"):
         with _officers_lock:
@@ -562,6 +586,18 @@ def delete_member(member_id: str, _payload: dict = Depends(_require_privileged_o
                     officer["imageUrl"] = "/images/officers/default.png"
                     break
     return {"success": True, "message": "Member deleted successfully."}
+
+
+@app.put("/admin/password")
+def update_admin_password(body: AdminPasswordUpdateRequest, payload: dict = Depends(_require_auth)):
+    if not payload.get("isAdmin"):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    with _members_lock:
+        member = next((m for m in members_store if m["member_number"] == ADMIN_MEMBER_NUMBER), None)
+        if member is None:
+            raise HTTPException(status_code=404, detail="Admin account not found.")
+        member["passcode"] = body.passcode
+    return {"success": True, "message": "Password updated successfully."}
 
 
 @app.get("/prayer-requests")
@@ -831,6 +867,8 @@ def update_officer(title: str, body: OfficerUpdateRequest, payload: dict = Depen
     member = next((m for m in members_store if m["member_number"] == body.memberNumber), None)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found.")
+    if _is_admin_member(member):
+        raise HTTPException(status_code=422, detail="Cannot assign admin as an officer.")
     try:
         photo_bytes = __import__("base64").b64decode(body.photoData)
     except Exception:
@@ -894,6 +932,6 @@ def submit_nomination(body: NominationRequest, _payload: dict = Depends(_require
 
 @app.post("/emails/all-members")
 def email_all_members(body: EmailAllMembersRequest, _payload: dict = Depends(_require_officer)):
-    all_emails = [m["email"] for m in members_store]
+    all_emails = [m["email"] for m in members_store if not _is_admin_member(m)]
     _send_email(all_emails, "Message from Council 830 Officers", body.message)
     return {"success": True, "message": "Message sent to all members."}

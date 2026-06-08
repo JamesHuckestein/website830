@@ -2,6 +2,7 @@ import { PRIVILEGED_OFFICER_TITLES, type MemberSubSection } from "@/data/siteDat
 
 type MembersAreaProps = {
   isOfficer: boolean;
+  isAdmin: boolean;
   officerPosition: string | null;
   onSelect: (sub: MemberSubSection) => void;
   onLogout: () => void;
@@ -27,10 +28,14 @@ const privilegedOfficerLinks: { id: MemberSubSection; label: string }[] = [
   { id: "updateOfficers", label: "Update Officers" },
 ];
 
-export function MembersArea({ isOfficer, officerPosition, onSelect, onLogout }: MembersAreaProps) {
-  const isPrivileged = officerPosition !== null && PRIVILEGED_OFFICER_TITLES.has(officerPosition);
+const adminOnlyLinks: { id: MemberSubSection; label: string }[] = [
+  { id: "adminPassword", label: "Change Admin Password" },
+];
+
+export function MembersArea({ isOfficer, isAdmin, officerPosition, onSelect, onLogout }: MembersAreaProps) {
+  const isPrivileged = isAdmin || (officerPosition !== null && PRIVILEGED_OFFICER_TITLES.has(officerPosition));
   const links = isOfficer
-    ? [...baseLinks, ...officerOnlyLinks, ...(isPrivileged ? privilegedOfficerLinks : [])]
+    ? [...baseLinks, ...officerOnlyLinks, ...(isPrivileged ? privilegedOfficerLinks : []), ...(isAdmin ? adminOnlyLinks : [])]
     : baseLinks;
   return (
     <section className="space-y-6">

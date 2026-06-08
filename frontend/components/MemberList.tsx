@@ -20,11 +20,12 @@ import {
 type MemberListProps = {
   token: string;
   isOfficer: boolean;
+  isAdmin: boolean;
   officerPosition: string | null;
   onBack: () => void;
 };
 
-export function MemberList({ token, isOfficer, officerPosition, onBack }: MemberListProps) {
+export function MemberList({ token, isOfficer, isAdmin, officerPosition, onBack }: MemberListProps) {
   const [members, setMembers] = useState<MemberResponse[] | null>(null);
   const [searchText, setSearchText] = useState("");
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export function MemberList({ token, isOfficer, officerPosition, onBack }: Member
   const [formError, setFormError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const isPrivileged = officerPosition !== null && PRIVILEGED_OFFICER_TITLES.has(officerPosition);
+  const isPrivileged = isAdmin || (officerPosition !== null && PRIVILEGED_OFFICER_TITLES.has(officerPosition));
 
   const fetchMembers = async () => {
     try {

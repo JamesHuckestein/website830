@@ -1362,3 +1362,61 @@ def test_create_photo_trims_title_and_photo_url():
     record = next(p for p in client.get("/photos").json() if p["id"] == new_id)
     assert record["title"] == "Padded"
     assert record["photoUrl"] == "/gallery/padded.jpg"
+
+
+# ---------------------------------------------------------------------------
+# Admin account
+# ---------------------------------------------------------------------------
+
+def _admin_auth() -> dict:
+    return _auth("830999999", "JesusisLord1!")
+
+
+def test_admin_login_success():
+    r = client.post("/auth/login", json={"membershipNumber": "830999999", "passcode": "JesusisLord1!"})
+    assert r.status_code == 200
+    import jwt as pyjwt
+    payload = pyjwt.decode(r.json()["token"], options={"verify_signature": False})
+    assert payload["isAdmin"] is True
+    assert payload["isOfficer"] is True
+    assert payload["officerPosition"] is None
+
+
+def test_admin_not_in_get_members():
+    r = client.get("/members", headers=_admin_auth())
+    assert r.status_code == 200
+    numbers = [m["memberNumber"] for m in r.json()]
+    assert "830999999" not in numbers
+
+
+def test_admin_not_in_birthdays():
+    r = client.get("/members/birthdays", headers=_admin_auth())
+    assert r.status_code == 200
+    numbers = [m["memberNumber"] for m in r.json()]
+    assert "830999999" not in numbers
+
+
+def test_admin_not_in_csv_export():
+    r = client.get("/members/export-csv", headers=_admin_auth())
+    assert r.status_code == 200
+    assert "830999999" not in r.text
+
+
+def test_admin_not_in_email_all_members():
+    r = client.post(
+        "/emails/all-members",
+        headers=_admin_auth(),
+        json={"message": "Test message"},
+    )
+    assert r.status_code == 200
+
+
+def test_admin_hidden_from_non_admin_get_member():
+    r = client.get("/members/830999999", headers=_officer_auth())
+    assert r.status_code == 404
+
+
+def test_admin_can_view_own_record():
+    r = client.get("/members/830999999", headers=_admin_auth())
+    assert r.status_code == 200
+    assert r.json()["memberNumber"] == "830999999"

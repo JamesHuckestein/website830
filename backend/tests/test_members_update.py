@@ -350,3 +350,71 @@ def test_delete_member_forbidden_non_privileged_officer():
 def test_delete_member_unauthorized_no_token():
     r = client.delete("/members/8301015")
     assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Admin account protection
+# ---------------------------------------------------------------------------
+
+def _admin_auth() -> dict:
+    return {"Authorization": f"Bearer {_token('830999999', 'JesusisLord1!')}"}
+
+
+def test_privileged_officer_cannot_delete_admin():
+    r = client.delete("/members/830999999", headers=_privileged_auth())
+    assert r.status_code == 403
+    assert "admin" in r.json()["detail"].lower()
+
+
+def test_privileged_officer_cannot_edit_admin():
+    body = _valid_create_body()
+    body["memberNumber"] = "8309999"
+    r = client.put("/members/830999999/full", json=body, headers=_privileged_auth())
+    assert r.status_code == 403
+    assert "admin" in r.json()["detail"].lower()
+
+
+def test_admin_can_create_member():
+    r = client.post("/members", json=_valid_create_body(), headers=_admin_auth())
+    assert r.status_code == 201
+
+
+def test_admin_can_edit_regular_member():
+    body = _valid_create_body()
+    body["memberNumber"] = "8301015"
+    r = client.put("/members/8301015/full", json=body, headers=_admin_auth())
+    assert r.status_code == 200
+
+
+def test_admin_can_delete_regular_member():
+    r = client.delete("/members/8301015", headers=_admin_auth())
+    assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Admin password endpoint
+# ---------------------------------------------------------------------------
+
+def test_admin_password_update_success():
+    r = client.put("/admin/password", json={"passcode": "NewPass123!"}, headers=_admin_auth())
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    # Verify new password works
+    r2 = client.post("/auth/login", json={"membershipNumber": "830999999", "passcode": "NewPass123!"})
+    assert r2.status_code == 200
+
+
+def test_admin_password_update_old_password_fails_after_change():
+    client.put("/admin/password", json={"passcode": "NewPass123!"}, headers=_admin_auth())
+    r = client.post("/auth/login", json={"membershipNumber": "830999999", "passcode": "JesusisLord1!"})
+    assert r.status_code == 401
+
+
+def test_non_admin_cannot_update_admin_password():
+    r = client.put("/admin/password", json={"passcode": "HackedPass!"}, headers=_privileged_auth())
+    assert r.status_code == 403
+
+
+def test_non_officer_cannot_update_admin_password():
+    r = client.put("/admin/password", json={"passcode": "HackedPass!"}, headers=_non_officer_auth())
+    assert r.status_code == 403
