@@ -1,28 +1,67 @@
-import Image from "next/image";
-
+import { AdminPasswordForm } from "@/components/AdminPasswordForm";
+import { AnnouncementsUpdate } from "@/components/AnnouncementsUpdate";
+import { BirthdayList } from "@/components/BirthdayList";
+import { Calendar } from "@/components/Calendar";
+import { CalendarUpdates } from "@/components/CalendarUpdates";
+import { ContactInfoForm } from "@/components/ContactInfoForm";
 import { HomeCarousel } from "@/components/HomeCarousel";
+import { MeetingMinutes } from "@/components/MeetingMinutes";
+import { MemberList } from "@/components/MemberList";
+import { MembersArea } from "@/components/MembersArea";
 import { MembersLoginForm } from "@/components/MembersLoginForm";
+import { News } from "@/components/News";
+import { NominationForm } from "@/components/NominationForm";
+import { OfficerContacts } from "@/components/OfficerContacts";
+import { OfficersGrid } from "@/components/OfficersGrid";
+import { OfficersUpdate } from "@/components/OfficersUpdate";
+import { PhotoGallery } from "@/components/PhotoGallery";
+import { PhotoGalleryUpdate } from "@/components/PhotoGalleryUpdate";
+import { PrayerRequests } from "@/components/PrayerRequests";
+import { PublicPrayerRequests } from "@/components/PublicPrayerRequests";
 import {
   aboutCouncilDetails,
   officers,
   sectionContent,
+  type MemberSubSection,
   type SectionId,
 } from "@/data/siteData";
 
 type MainPanelProps = {
   activeSection: SectionId;
   isLoggedIn: boolean;
-  onLogin: (membershipNumber: string, passcode: string) => boolean;
+  isOfficer: boolean;
+  isAdmin: boolean;
+  officerPosition: string | null;
+  token: string | null;
+  memberNumber: string | null;
+  memberSubSection: MemberSubSection | null;
+  meetingMinutesDetail: string | null;
+  onLogin: (membershipNumber: string, passcode: string) => Promise<boolean>;
   onLogout: () => void;
   onNavigateToSection: (section: SectionId) => void;
+  onSelectMemberSubSection: (sub: MemberSubSection) => void;
+  onSelectMeetingMinute: (id: string) => void;
+  onBackToMeetingMinutes: () => void;
+  onBackToMembersArea: () => void;
 };
 
 export function MainPanel({
   activeSection,
   isLoggedIn,
+  isOfficer,
+  isAdmin,
+  officerPosition,
+  token,
+  memberNumber,
+  memberSubSection,
+  meetingMinutesDetail,
   onLogin,
   onLogout,
   onNavigateToSection,
+  onSelectMemberSubSection,
+  onSelectMeetingMinute,
+  onBackToMeetingMinutes,
+  onBackToMembersArea,
 }: MainPanelProps) {
   if (activeSection === "home") {
     return (
@@ -34,72 +73,75 @@ export function MainPanel({
   }
 
   if (activeSection === "officers") {
-    return (
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-[#032147]">Officers</h2>
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {officers.map((officer) => (
-            <li
-              key={officer.title}
-              className="overflow-hidden rounded-md border border-[#E7E7E7] bg-white"
-            >
-              <div className="flex justify-center bg-[#F5F5F5] p-2">
-                <div className="rounded-md border border-[#E0E0E0] bg-white p-1">
-                  <Image
-                    src={officer.imageUrl}
-                    alt={`${officer.name} - ${officer.title}`}
-                    width={384}
-                    height={512}
-                    className="block h-36 w-auto max-w-full object-contain object-top"
-                    sizes="(max-width: 640px) 42vw, 11rem"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1 p-3">
-                <p className="font-semibold text-[#032147]">{officer.title}</p>
-                <p className="text-sm text-[#888888]">{officer.name}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-    );
+    return <OfficersGrid />;
   }
 
   if (activeSection === "members") {
-    if (isLoggedIn) {
-      return (
-        <section className="space-y-4">
-          <h2 className="text-2xl font-semibold text-[#032147]">Members Area</h2>
-          <p className="text-[#888888]">
-            Welcome to the members-only section. Here you can review private
-            council updates and volunteer schedules.
-          </p>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-[#032147]">
-            <li>Monthly council meeting agenda</li>
-            <li>Committee sign-up opportunities</li>
-            <li>Internal volunteer contact list</li>
-          </ul>
-          <button
-            type="button"
-            className="rounded-md border border-[#753991] px-4 py-2 text-sm font-semibold text-[#753991]"
-            onClick={onLogout}
-          >
-            Logout
-          </button>
-        </section>
-      );
+    if (!isLoggedIn) {
+      return <MembersLoginForm onLogin={onLogin} />;
     }
 
-    return <MembersLoginForm onLogin={onLogin} />;
+    if (memberSubSection === "contactInfo") {
+      return <ContactInfoForm token={token!} memberNumber={memberNumber!} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "birthdays") {
+      return <BirthdayList token={token!} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "prayerRequests") {
+      return <PrayerRequests token={token!} memberNumber={memberNumber!} isOfficer={isOfficer} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "memberList") {
+      return <MemberList token={token!} isOfficer={isOfficer} isAdmin={isAdmin} officerPosition={officerPosition} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "officers") {
+      return <OfficerContacts token={token!} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "nomination") {
+      return <NominationForm token={token!} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "meetingMinutes") {
+      return (
+        <MeetingMinutes
+          token={token!}
+          detailId={meetingMinutesDetail}
+          onSelectMinute={onSelectMeetingMinute}
+          onBackToList={onBackToMeetingMinutes}
+          onBackToMembersArea={onBackToMembersArea}
+        />
+      );
+    }
+    if (memberSubSection === "calendarUpdates" && isOfficer) {
+      return <CalendarUpdates token={token!} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "announcementsUpdate" && isOfficer) {
+      return <AnnouncementsUpdate token={token!} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "editPhotoGallery" && isOfficer) {
+      return <PhotoGalleryUpdate token={token!} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "updateOfficers" && isOfficer) {
+      return <OfficersUpdate token={token!} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "adminPassword" && isAdmin) {
+      return <AdminPasswordForm token={token!} onBack={onBackToMembersArea} />;
+    }
+
+    return (
+      <MembersArea
+        isOfficer={isOfficer}
+        isAdmin={isAdmin}
+        officerPosition={officerPosition}
+        onSelect={onSelectMemberSubSection}
+        onLogout={onLogout}
+      />
+    );
   }
 
   if (activeSection === "about") {
-    const content = sectionContent.about;
     return (
       <section className="space-y-6">
-        <h2 className="text-2xl font-semibold text-[#032147]">{content.title}</h2>
-        <p className="text-[#888888]">{content.body}</p>
+        <h2 className="text-2xl font-semibold text-[#032147]">About Our Council</h2>
+        <p className="text-[#888888]">Council 830 serves parish families through faith formation, charity drives, and community fellowship throughout the year.</p>
         <div className="grid gap-8 md:grid-cols-2 md:gap-10">
           <div className="space-y-6">
             <div className="space-y-2">
@@ -173,6 +215,22 @@ export function MainPanel({
         </div>
       </section>
     );
+  }
+
+  if (activeSection === "prayer") {
+    return <PublicPrayerRequests />;
+  }
+
+  if (activeSection === "events") {
+    return <Calendar />;
+  }
+
+  if (activeSection === "news") {
+    return <News />;
+  }
+
+  if (activeSection === "photos") {
+    return <PhotoGallery />;
   }
 
   const content = sectionContent[activeSection];

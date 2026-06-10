@@ -22,7 +22,52 @@ export type Officer = {
   name: string;
   title: string;
   imageUrl: string;
+  email?: string;
 };
+
+export type MemberSubSection =
+  | "contactInfo"
+  | "birthdays"
+  | "prayerRequests"
+  | "memberList"
+  | "officers"
+  | "nomination"
+  | "meetingMinutes"
+  | "calendarUpdates"
+  | "announcementsUpdate"
+  | "editPhotoGallery"
+  | "updateOfficers"
+  | "adminPassword";
+
+export const OFFICER_TITLES = [
+  "Grand Knight",
+  "Deputy Grand Knight",
+  "Chancellor",
+  "Advocate",
+  "Recorder",
+  "Treasurer",
+  "Warden",
+  "Inside Guard",
+  "Outside Guard",
+  "Trustee - 1 Year",
+  "Trustee - 2 Year",
+  "Trustee - 3 Year",
+  "Financial Secretary",
+  "Lecturer",
+] as const;
+
+export type OfficerTitle = (typeof OFFICER_TITLES)[number];
+
+export const PRIVILEGED_OFFICER_TITLES = new Set([
+  "Grand Knight",
+  "Deputy Grand Knight",
+  "Recorder",
+  "Financial Secretary",
+]);
+
+export function isOfficerTitle(title: string | null): title is OfficerTitle {
+  return OFFICER_TITLES.includes(title as OfficerTitle);
+}
 
 export const councilInfo = {
   name: "Knights of Columbus Council 830",
@@ -79,148 +124,30 @@ export const navItems: NavItem[] = [
   { id: "supreme", label: "Supreme Council Site" },
 ];
 
-const officerTitles = [
-  "Grand Knight",
-  "Deputy Grand Knight",
-  "Chancellor",
-  "Advocate",
-  "Recorder",
-  "Treasurer",
-  "Warden",
-  "Inside Guard",
-  "Outside Guard",
-  "Trustee - 1 Year",
-  "Trustee - 2 Year",
-  "Trustee - 3 Year",
-  "Financial Secretary",
-  "Lecturer",
-] as const;
-
-export const officers: Officer[] = Array.from({ length: 14 }, (_, index) => {
-  const title = officerTitles[index];
-  if (index === 0) {
-    return {
-      name: "SK John H Akers",
-      title,
-      imageUrl: "/officers/john-h-akers.png",
-    };
-  }
-  if (index === 1) {
-    return {
-      name: "SK James Huckestein",
-      title,
-      imageUrl: "/officers/james-h.png",
-    };
-  }
-  if (index === 2) {
-    return {
-      name: "SK Dennis M Riley",
-      title,
-      imageUrl: "/officers/Riley.png",
-    };
-  }
-  if (index === 3) {
-    return {
-      name: "SK Mark Radcliffe",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 4) {
-    return {
-      name: "SK John Grahek",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 5) {
-    return {
-      name: "SK John A. Manning",
-      title,
-      imageUrl: "/officers/Manning.png",
-    };
-  }
-  if (index === 6) {
-    return {
-      name: "Michael W. Schindler",
-      title,
-      imageUrl: "/officers/Schindler.png",
-    };
-  }
-  if (index === 7) {
-    return {
-      name: "Michael D. Gunnels",
-      title,
-      imageUrl: "/officers/Gunnels.png",
-    };
-  }
-  if (index === 8) {
-    return {
-      name: "Michael D. Placeholder",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 9) {
-    return {
-      name: "Aaron Sheets",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 10) {
-    return {
-      name: "SK Gary Walton",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 11) {
-    return {
-      name: "SK Frank A. Ventura",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 12) {
-    return {
-      name: "Rob Steele",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-  if (index === 13) {
-    return {
-      name: "Jan Wojciechowski",
-      title,
-      imageUrl: "/officers/Ventura.png",
-    };
-  }
-});
+export const officers: Officer[] = [
+  { name: "SK John H Akers",        title: "Grand Knight",        imageUrl: "/officers/john-h-akers.png", email: "john.akers@koc830.org" },
+  { name: "SK James Huckestein",    title: "Deputy Grand Knight", imageUrl: "/officers/james-h.png",      email: "james.huckestein@koc830.org" },
+  { name: "SK Dennis M Riley",      title: "Chancellor",          imageUrl: "/officers/Riley.png",        email: "dennis.riley@koc830.org" },
+  { name: "SK Mark Radcliffe",      title: "Advocate",            imageUrl: "/officers/Radcliffe.png",      email: "mark.radcliffe@koc830.org" },
+  { name: "SK John Grahek",         title: "Recorder",            imageUrl: "/officers/Grahek.png",      email: "john.grahek@koc830.org" },
+  { name: "SK John A. Manning",     title: "Treasurer",           imageUrl: "/officers/Manning.png",      email: "john.manning@koc830.org" },
+  { name: "Michael W. Schindler",   title: "Warden",              imageUrl: "/officers/Schindler.png",    email: "michael.schindler@koc830.org" },
+  { name: "Michael D. Gunnels",     title: "Inside Guard",        imageUrl: "/officers/Gunnels.png",      email: "michael.gunnels@koc830.org" },
+  { name: "Michael D. Placeholder", title: "Outside Guard",       imageUrl: "/officers/Ventura.png",      email: "outside.guard@koc830.org" },
+  { name: "Aaron Sheets",           title: "Trustee - 1 Year",   imageUrl: "/officers/Sheets.png",      email: "aaron.sheets@koc830.org" },
+  { name: "SK Gary Walton",         title: "Trustee - 2 Year",   imageUrl: "/officers/Ventura.png",      email: "gary.walton@koc830.org" },
+  { name: "SK Frank A. Ventura",    title: "Trustee - 3 Year",   imageUrl: "/officers/Ventura.png",      email: "frank.ventura@koc830.org" },
+  { name: "Rob Steele",             title: "Financial Secretary", imageUrl: "/officers/Steele.png",      email: "rob.steele@koc830.org" },
+  { name: "Jan Wojciechowski",      title: "Lecturer",            imageUrl: "/officers/Ventura.png",      email: "jan.wojciechowski@koc830.org" },
+];
 
 export const sectionContent: Record<
-  Exclude<SectionId, "home" | "officers" | "members">,
+  Exclude<SectionId, "home" | "officers" | "members" | "about" | "events" | "news" | "photos">,
   { title: string; body: string; links?: { label: string; href: string }[] }
 > = {
-  about: {
-    title: "About Our Council",
-    body: "Council 830 serves parish families through faith formation, charity drives, and community fellowship throughout the year.",
-  },
   prayer: {
     title: "Prayer Requests",
     body: "Please keep our parish families, clergy, and first responders in your prayers. Contact the council office to submit intentions.",
-  },
-  events: {
-    title: "Events Calendar",
-    body: "Upcoming events include monthly meetings, parish breakfasts, and service projects. Dates and times are posted each month.",
-  },
-  news: {
-    title: "News & Announcements",
-    body: "Membership renewal packets are available now. Volunteers are needed for our spring charity dinner and youth outreach event.",
-  },
-  photos: {
-    title: "Photo Galleries",
-    body: "View highlights from council dinners, parish service days, and fraternity events as we continue to grow in faith and service.",
   },
   links: {
     title: "Links of Interest",
@@ -228,7 +155,7 @@ export const sectionContent: Record<
     links: [
       { label: "USCCB", href: "https://www.usccb.org/" },
       { label: "Vatican", href: "https://www.vatican.va/" },
-      { label: "Local Diocese", href: "https://www.dioceseoftucson.org/" },
+      { label: "Local Diocese", href: "https://dallascatholic.org/" },
     ],
   },
   catholicism: {
@@ -238,12 +165,12 @@ export const sectionContent: Record<
   assembly: {
     title: "Assembly Sites",
     body: "Visit district assembly resources for fourth degree information.",
-    links: [{ label: "District Assembly", href: "https://www.kofc.org/" }],
+    links: [{ label: "Assembly 1601", href: "https://uknight.org/Assembly.asp?A=1601" }],
   },
   state: {
     title: "State Council Site",
     body: "See statewide announcements, programs, and forms.",
-    links: [{ label: "Arizona State Council", href: "https://www.azkofc.org/" }],
+    links: [{ label: "Texas State Council", href: "https://tkofc.org/" }],
   },
   supreme: {
     title: "Supreme Council Site",
