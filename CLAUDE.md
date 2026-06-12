@@ -6,17 +6,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 frontend/    Next.js 16 app
-backend/     FastAPI app (in-memory stores seeded from docs/schema.json)
+backend/     FastAPI app (DynamoDB-backed via app/repos/ + app/dynamo.py)
 docs/        PLAN.md — original phased roadmap (Parts 1-9)
+             Dynamo.md — DynamoDB migration plan and table designs
              Calendar-Plan.md — Phase-2 roadmap for the interactive calendar feature
              News-Plan.md / News-Plan2.md — Phase-2 roadmap for News & Announcements
              Photo-Gallery.md / Photo-Gallery2.md — Phase-2 roadmap for Photo Gallery
+infra/       dynamodb-tables.yaml — CloudFormation for 7 DynamoDB tables
+             iam-dynamodb-policy.yaml — IAM policy scoped to the tables
 scripts/    start.sh / stop.sh dev orchestration (Mac-only)
 ```
 
 ## Development Commands
 
-All commands run from `frontend/`:
+Frontend commands (run from `frontend/`):
 
 ```bash
 npm run dev          # dev server on http://localhost:3000
@@ -32,6 +35,15 @@ To run a single unit test file:
 npx vitest run components/AppShell.test.tsx
 ```
 
+Backend commands (run from `backend/`):
+
+```bash
+.venv/bin/uvicorn app.main:app --reload --port 8000   # dev server
+.venv/bin/python -m pytest tests/                      # all tests (uses moto mock)
+.venv/bin/python -m pytest tests/test_dynamo_integration.py  # DynamoDB integration tests
+.venv/bin/python -m scripts.seed_dynamo                # seed DynamoDB tables (local or remote)
+```
+
 ## Architecture
 
 The app is a single-page client-rendered Next.js app. `app/page.tsx` renders `<AppShell />`, which owns all state (`activeSection`, `isLoggedIn`) and wires together the three layout regions:
@@ -42,7 +54,7 @@ The app is a single-page client-rendered Next.js app. `app/page.tsx` renders `<A
 
 `data/siteData.ts` is the single source of truth for all content and types (`SectionId`, `NavItem`, `Officer`).
 
-`lib/auth.ts` has demo credentials for the members login (no backend yet).
+`lib/auth.ts` has demo credentials for the members login (frontend-only fallback; the backend handles real auth via JWT).
 
 The `events` SectionId renders a live interactive `<Calendar />` (no longer a static `sectionContent` blurb); officers see an additional "Calendar Updates" entry inside the members area for Add/Edit/Delete of events. See `docs/Calendar-Plan.md` for the phased rollout.
 
@@ -65,10 +77,40 @@ See `frontend/CLAUDE.md` for full component contracts, data shapes, and testing 
 - No emojis anywhere
 - Keep it simple — never over-engineer, no unnecessary defensive programming
 
-## Planned Backend (not yet built)
+## Backend Architecture
 
-Per `docs/PLAN.md`, the future backend will add:
+The FastAPI backend (`backend/app/main.py`) serves all API routes. Data is persisted in AWS DynamoDB via a repository pattern:
+
+```
+app/main.py          — FastAPI routes, request models, auth helpers
+app/dynamo.py        — DynamoDB client helpers (get/put/update/delete/scan/query/batch)
+app/repos/           — Entity-specific repository modules (one per table)
+  members.py         — Members table (PK: member_number)
+  officers.py        — Officers table (PK: title)
+  events.py          — Events table (PK: id, GSI: day-index)
+  announcements.py   — Announcements table (PK: id)
+  photos.py          — Photos table (PK: id)
+  prayer_requests.py — Prayer Requests table (PK: id)
+  meeting_minutes.py — Meeting Minutes table (PK: id)
+app/seed.py          — Constants only (ADMIN_MEMBER_NUMBER, OFFICER_TITLES_ORDERED)
+```
+
+Tests use `moto[dynamodb]` to mock DynamoDB in-process (no Docker/Java required). The `conftest.py` fixture creates all 7 tables and seeds them from `docs/schema.json` before each test.
+
+## Environment Variables (Backend)
+
+| Variable | Dev Value | Production Value |
+|----------|-----------|------------------|
+| `DYNAMO_TABLE_PREFIX` | `koc830-dev-` | `koc830-prod-` |
+| `DYNAMO_ENDPOINT_URL` | `http://localhost:8000` (DynamoDB Local) or omit (moto in tests) | omit (uses AWS default) |
+| `AWS_REGION` | `us-east-1` | `us-east-1` |
+| `JWT_SECRET` | `dev-secret-change-in-production!!` | (real secret) |
+| `EMAIL_GATEWAY_URL` | omit (stub logging) | API Gateway URL |
+
+## Future Work
+
+Per `docs/PLAN.md`, remaining items:
 - AWS Cognito/Amplify for member authentication (replacing `lib/auth.ts` demo stubs)
-- FastAPI backend in `backend/` serving member data from AWS RDS
 - Email via AWS API Gateway → Lambda → SES
 - Production hosting: static export on S3 + CloudFront
+- DynamoDB tables deployed via `infra/dynamodb-tables.yaml` (CloudFormation)

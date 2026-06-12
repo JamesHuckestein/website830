@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: KoC Council 830 — IAM role and policy for DynamoDB access
+
+Parameters:
+  TablePrefix:
+    Type: String
+    Default: koc830-dev-
+    Description: Must match the prefix used in dynamodb-tables.yaml
+
+Resources:
+
+  DynamoDBAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${TablePrefix}dynamodb-access"
+      Description: Read/write access to KoC 830 DynamoDB tables
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: TableOperations
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:BatchWriteItem
+              - dynamodb:BatchGetItem
+              - dynamodb:ConditionCheckItem
+            Resource:
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}members"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}officers"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}events"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}announcements"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}photos"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}prayer-requests"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}meeting-minutes"
+          - Sid: IndexOperations
+            Effect: Allow
+            Action:
+              - dynamodb:Query
+              - dynamodb:Scan
+            Resource:
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}members/index/*"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}events/index/*"
+          - Sid: TransactWriteItems
+            Effect: Allow
+            Action:
+              - dynamodb:TransactWriteItems
+              - dynamodb:TransactGetItems
+            Resource:
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}members"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}officers"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}events"
+
+  BackendRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${TablePrefix}backend-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref DynamoDBAccessPolicy
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+Outputs:
+  BackendRoleArn:
+    Value: !GetAtt BackendRole.Arn
+    Description: ARN for the backend execution role (attach to Lambda or ECS task)
+  PolicyArn:
+    Value: !Ref DynamoDBAccessPolicy
+    Description: Standalone policy ARN (attach to dev IAM user if needed)

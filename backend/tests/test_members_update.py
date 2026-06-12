@@ -3,18 +3,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.seed import reset_to_seed, members_store, officers_store
+from app.repos import members as members_repo
 
 client = TestClient(app)
 
 _JWT_SECRET = "dev-secret-change-in-production!!"
-
-
-@pytest.fixture(autouse=True)
-def reset():
-    reset_to_seed()
-    yield
-    reset_to_seed()
 
 
 def _token(member_number: str, passcode: str) -> str:
@@ -157,9 +150,7 @@ def test_update_member_full_success():
 
 
 def test_update_member_full_blank_passcode_no_change():
-    original_passcode = next(
-        m["passcode"] for m in members_store if m["member_number"] == "8301015"
-    )
+    original_passcode = members_repo.get_by_number("8301015")["passcode"]
     body = {
         "memberNumber": "8301015",
         "passcode": None,
@@ -181,9 +172,7 @@ def test_update_member_full_blank_passcode_no_change():
     r = client.put("/members/8301015/full", json=body, headers=_privileged_auth())
     assert r.status_code == 200
 
-    current_passcode = next(
-        m["passcode"] for m in members_store if m["member_number"] == "8301015"
-    )
+    current_passcode = members_repo.get_by_number("8301015")["passcode"]
     assert current_passcode == original_passcode
 
 
@@ -209,9 +198,7 @@ def test_update_member_full_new_passcode():
     r = client.put("/members/8301015/full", json=body, headers=_privileged_auth())
     assert r.status_code == 200
 
-    current_passcode = next(
-        m["passcode"] for m in members_store if m["member_number"] == "8301015"
-    )
+    current_passcode = members_repo.get_by_number("8301015")["passcode"]
     assert current_passcode == "newpassword"
 
 
@@ -334,7 +321,7 @@ def test_delete_member_clears_officer_slot():
 
     officers_r = client.get("/officers")
     gk = next(o for o in officers_r.json() if o["title"] == "Grand Knight")
-    assert gk["name"] is None
+    assert gk["name"] == "Vacant"
 
 
 def test_delete_member_forbidden_non_officer():

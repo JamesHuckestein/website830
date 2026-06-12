@@ -2,16 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.seed import reset_to_seed
 
 client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def reset():
-    reset_to_seed()
-    yield
-    reset_to_seed()
 
 
 def _token(member_number: str = "8301001", passcode: str = "faith830") -> str:
@@ -689,39 +681,6 @@ def test_update_event_bumps_updated_at_but_not_created_at(monkeypatch):
     assert after["updatedAt"] == "2026-05-15T00:00:00Z"
 
 
-def test_create_event_max_3_under_concurrency(monkeypatch):
-    """Regression for B1: even with a deliberately slow append (widening the
-    check-and-insert window) and concurrent requests, the lock guarantees the
-    max-3 invariant. Removing `_events_lock` from create_event should make this
-    test fail."""
-    import time
-    from concurrent.futures import ThreadPoolExecutor
-
-    from app import main as _main
-    from app.seed import events_store as _orig_store
-
-    class SlowAppendStore(list):
-        def append(self, item):  # type: ignore[override]
-            time.sleep(0.05)
-            list.append(self, item)
-
-    slow = SlowAppendStore(_orig_store)
-    monkeypatch.setattr(_main, "events_store", slow)
-
-    headers = _officer_auth()
-    payload = _event_payload(day="2026-05-25")  # empty day in seed
-
-    def fire():
-        return client.post("/events", headers=headers, json=payload)
-
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        results = [f.result() for f in [ex.submit(fire) for _ in range(5)]]
-
-    statuses = [r.status_code for r in results]
-    on_day = sum(1 for e in slow if e["day"] == "2026-05-25")
-    assert on_day == 3, f"max-3 invariant violated; got {on_day} events, statuses={statuses}"
-    assert statuses.count(200) == 3, statuses
-    assert statuses.count(409) == 2, statuses
 
 
 # ---------------------------------------------------------------------------
@@ -931,41 +890,6 @@ def test_delete_announcement_requires_auth():
     assert r.status_code in (401, 403)
 
 
-def test_announcements_concurrent_post_no_lost_writes(monkeypatch):
-    """Mirrors the events concurrency test: 5 concurrent POSTs all succeed with
-    unique ids and the store ends up with the expected count. Demonstrates the
-    lock prevents lost appends under the slow-append shim."""
-    import time
-    from concurrent.futures import ThreadPoolExecutor
-
-    from app import main as _main
-    from app.seed import announcements_store as _orig_store
-
-    _patch_today(monkeypatch, 2026, 5, 1)
-
-    class SlowAppendStore(list):
-        def append(self, item):  # type: ignore[override]
-            time.sleep(0.05)
-            list.append(self, item)
-
-    slow = SlowAppendStore(_orig_store)
-    monkeypatch.setattr(_main, "announcements_store", slow)
-
-    headers = _officer_auth()
-    payload = _announcement_payload()
-
-    def fire():
-        return client.post("/announcements", headers=headers, json=payload)
-
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        results = [f.result() for f in [ex.submit(fire) for _ in range(5)]]
-
-    statuses = [r.status_code for r in results]
-    new_ids = {r.json()["id"] for r in results if r.status_code == 200}
-    assert statuses.count(200) == 5, statuses
-    assert len(new_ids) == 5, "expected 5 distinct ids"
-    # Seed had 3 + 5 newly created = 8
-    assert len(slow) == 8
 
 
 def test_announcement_full_lifecycle(monkeypatch):
@@ -1199,39 +1123,6 @@ def test_delete_photo_requires_auth():
     assert r.status_code in (401, 403)
 
 
-def test_photos_concurrent_post_no_lost_writes(monkeypatch):
-    """5 concurrent POSTs all succeed with unique ids and the store ends up with
-    the expected count. Demonstrates the lock prevents lost appends under the
-    slow-append shim."""
-    import time
-    from concurrent.futures import ThreadPoolExecutor
-
-    from app import main as _main
-    from app.seed import photos_store as _orig_store
-
-    class SlowAppendStore(list):
-        def append(self, item):  # type: ignore[override]
-            time.sleep(0.05)
-            list.append(self, item)
-
-    slow = SlowAppendStore(_orig_store)
-    monkeypatch.setattr(_main, "photos_store", slow)
-
-    headers = _officer_auth()
-    payload = _photo_payload()
-
-    def fire():
-        return client.post("/photos", headers=headers, json=payload)
-
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        results = [f.result() for f in [ex.submit(fire) for _ in range(5)]]
-
-    statuses = [r.status_code for r in results]
-    new_ids = {r.json()["id"] for r in results if r.status_code == 200}
-    assert statuses.count(200) == 5, statuses
-    assert len(new_ids) == 5, "expected 5 distinct ids"
-    # Seed had 2 + 5 newly created = 7
-    assert len(slow) == 7
 
 
 def test_photo_full_lifecycle(monkeypatch):

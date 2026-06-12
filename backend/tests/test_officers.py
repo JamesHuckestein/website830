@@ -5,7 +5,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.seed import reset_to_seed
 
 client = TestClient(app)
 
@@ -20,13 +19,6 @@ _VALID_PNG_B64 = base64.b64encode(_VALID_PNG).decode()
 
 _NOT_PNG = b"This is not a PNG file at all"
 _NOT_PNG_B64 = base64.b64encode(_NOT_PNG).decode()
-
-
-@pytest.fixture(autouse=True)
-def reset():
-    reset_to_seed()
-    yield
-    reset_to_seed()
 
 
 def _token(member_number: str, passcode: str) -> str:
