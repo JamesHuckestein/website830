@@ -133,7 +133,7 @@ export const officers: Officer[] = [
   { name: "SK John A. Manning",     title: "Treasurer",           imageUrl: "/officers/Manning.png",      email: "john.manning@koc830.org" },
   { name: "Michael W. Schindler",   title: "Warden",              imageUrl: "/officers/Schindler.png",    email: "michael.schindler@koc830.org" },
   { name: "Michael D. Gunnels",     title: "Inside Guard",        imageUrl: "/officers/Gunnels.png",      email: "michael.gunnels@koc830.org" },
-  { name: "Michael D. Placeholder", title: "Outside Guard",       imageUrl: "/officers/Ventura.png",      email: "outside.guard@koc830.org" },
+  { name: "Vacant",                  title: "Outside Guard",       imageUrl: "/officers/placeholder.png",  email: "" },
   { name: "Aaron Sheets",           title: "Trustee - 1 Year",   imageUrl: "/officers/Sheets.png",      email: "aaron.sheets@koc830.org" },
   { name: "SK Gary Walton",         title: "Trustee - 2 Year",   imageUrl: "/officers/Ventura.png",      email: "gary.walton@koc830.org" },
   { name: "SK Frank A. Ventura",    title: "Trustee - 3 Year",   imageUrl: "/officers/Ventura.png",      email: "frank.ventura@koc830.org" },
