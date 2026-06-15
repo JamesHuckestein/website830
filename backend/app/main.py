@@ -195,7 +195,7 @@ class OfficerUpdateRequest(BaseModel):
 
 
 class _MemberBody(BaseModel):
-    memberNumber: str = Field(pattern=r"^830\d{4}$")
+    memberNumber: str = Field(pattern=r"^\d{6,9}$")
     firstName: str = Field(min_length=1)
     lastName: str = Field(min_length=1)
     addressStreet: str = Field(min_length=1)

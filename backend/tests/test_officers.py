@@ -28,15 +28,15 @@ def _token(member_number: str, passcode: str) -> str:
 
 
 def _privileged_auth() -> dict:
-    return {"Authorization": f"Bearer {_token('8301002', 'charity830')}"}
+    return {"Authorization": f"Bearer {_token('4897307', 'koc830')}"}
 
 
 def _deputy_gk_auth() -> dict:
-    return {"Authorization": f"Bearer {_token('8301001', 'faith830')}"}
+    return {"Authorization": f"Bearer {_token('3418397', 'koc830')}"}
 
 
 def _non_officer_auth() -> dict:
-    return {"Authorization": f"Bearer {_token('8301015', 'hope830')}"}
+    return {"Authorization": f"Bearer {_token('4606798', 'koc830')}"}
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +67,7 @@ def test_get_officers_returns_correct_fields():
 def test_put_officer_privileged_success():
     r = client.put(
         "/officers/Treasurer",
-        json={"memberNumber": "8301004", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
+        json={"memberNumber": "4661909", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
         headers=_privileged_auth(),
     )
     assert r.status_code == 200
@@ -75,13 +75,13 @@ def test_put_officer_privileged_success():
 
     roster = client.get("/officers").json()
     treasurer = next(o for o in roster if o["title"] == "Treasurer")
-    assert "Radcliffe" in treasurer["name"]
+    assert "Aday" in treasurer["name"]
 
 
 def test_put_officer_deputy_gk_success():
     r = client.put(
         "/officers/Treasurer",
-        json={"memberNumber": "8301004", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
+        json={"memberNumber": "4661909", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
         headers=_deputy_gk_auth(),
     )
     assert r.status_code == 200
@@ -91,7 +91,7 @@ def test_put_officer_deputy_gk_success():
 def test_put_officer_non_privileged_rejected():
     r = client.put(
         "/officers/Treasurer",
-        json={"memberNumber": "8301004", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
+        json={"memberNumber": "4661909", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
         headers=_non_officer_auth(),
     )
     assert r.status_code == 403
@@ -100,7 +100,7 @@ def test_put_officer_non_privileged_rejected():
 def test_put_officer_no_auth_rejected():
     r = client.put(
         "/officers/Treasurer",
-        json={"memberNumber": "8301004", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
+        json={"memberNumber": "4661909", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
     )
     assert r.status_code == 401
 
@@ -108,7 +108,7 @@ def test_put_officer_no_auth_rejected():
 def test_put_officer_invalid_title():
     r = client.put(
         "/officers/Supreme%20Leader",
-        json={"memberNumber": "8301004", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
+        json={"memberNumber": "4661909", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
         headers=_privileged_auth(),
     )
     assert r.status_code == 404
@@ -126,7 +126,7 @@ def test_put_officer_invalid_member():
 def test_put_officer_invalid_png():
     r = client.put(
         "/officers/Treasurer",
-        json={"memberNumber": "8301004", "photoData": _NOT_PNG_B64, "photoFilename": "fake.png"},
+        json={"memberNumber": "4661909", "photoData": _NOT_PNG_B64, "photoFilename": "fake.png"},
         headers=_privileged_auth(),
     )
     assert r.status_code == 422
@@ -136,7 +136,7 @@ def test_put_officer_invalid_png():
 def test_put_officer_invalid_base64():
     r = client.put(
         "/officers/Treasurer",
-        json={"memberNumber": "8301004", "photoData": "not-valid-base64!!!", "photoFilename": "bad.png"},
+        json={"memberNumber": "4661909", "photoData": "not-valid-base64!!!", "photoFilename": "bad.png"},
         headers=_privileged_auth(),
     )
     assert r.status_code == 422
@@ -149,13 +149,13 @@ def test_put_officer_clears_old_member_position():
 
     r = client.put(
         "/officers/Treasurer",
-        json={"memberNumber": "8301004", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
+        json={"memberNumber": "4661909", "photoData": _VALID_PNG_B64, "photoFilename": "new.png"},
         headers=_privileged_auth(),
     )
     assert r.status_code == 200
 
     members_r = client.get("/members", headers=_privileged_auth())
-    manning = next(m for m in members_r.json() if m["memberNumber"] == "8301005")
+    manning = next(m for m in members_r.json() if m["memberNumber"] == "3683409")
     assert manning["officerPosition"] is None
 
 
@@ -164,18 +164,18 @@ def test_put_officer_clears_old_member_position():
 # ---------------------------------------------------------------------------
 
 def test_jwt_includes_officer_position_for_officer():
-    r = client.post("/auth/login", json={"membershipNumber": "8301002", "passcode": "charity830"})
+    r = client.post("/auth/login", json={"membershipNumber": "4897307", "passcode": "koc830"})
     payload = pyjwt.decode(r.json()["token"], options={"verify_signature": False})
     assert payload["officerPosition"] == "Grand Knight"
 
 
 def test_jwt_includes_null_officer_position_for_non_officer():
-    r = client.post("/auth/login", json={"membershipNumber": "8301015", "passcode": "hope830"})
+    r = client.post("/auth/login", json={"membershipNumber": "4606798", "passcode": "koc830"})
     payload = pyjwt.decode(r.json()["token"], options={"verify_signature": False})
     assert payload["officerPosition"] is None
 
 
 def test_jwt_includes_officer_position_for_deputy_gk():
-    r = client.post("/auth/login", json={"membershipNumber": "8301001", "passcode": "faith830"})
+    r = client.post("/auth/login", json={"membershipNumber": "3418397", "passcode": "koc830"})
     payload = pyjwt.decode(r.json()["token"], options={"verify_signature": False})
     assert payload["officerPosition"] == "Deputy Grand Knight"

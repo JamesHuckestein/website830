@@ -53,7 +53,7 @@ _OFFICER_PHOTO_MAP = {
     "Trustee - 2 Year": "/officers/Ventura.png",
     "Trustee - 3 Year": "/officers/Ventura.png",
     "Financial Secretary": "/officers/Steele.png",
-    "Lecturer": "/officers/Ventura.png",
+    "Lecturer": "/officers/PhilKay.png",
 }
 
 ADMIN_RECORD = {

@@ -138,7 +138,7 @@ export const officers: Officer[] = [
   { name: "SK Gary Walton",         title: "Trustee - 2 Year",   imageUrl: "/officers/Ventura.png",      email: "gary.walton@koc830.org" },
   { name: "SK Frank A. Ventura",    title: "Trustee - 3 Year",   imageUrl: "/officers/Ventura.png",      email: "frank.ventura@koc830.org" },
   { name: "Rob Steele",             title: "Financial Secretary", imageUrl: "/officers/Steele.png",      email: "rob.steele@koc830.org" },
-  { name: "Jan Wojciechowski",      title: "Lecturer",            imageUrl: "/officers/Ventura.png",      email: "jan.wojciechowski@koc830.org" },
+  { name: "Philip Kay",              title: "Lecturer",            imageUrl: "/officers/PhilKay.png",      email: "phil@philkay.com" },
 ];
 
 export const sectionContent: Record<

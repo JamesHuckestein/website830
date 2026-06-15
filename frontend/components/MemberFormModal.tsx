@@ -77,7 +77,7 @@ export function MemberFormModal({ mode, member, submitting, error, onSave, onCan
           {mode === "add" ? "Add Member" : "Edit Member"}
         </h2>
         <form onSubmit={handleSubmit} autoComplete="off" className="space-y-3">
-          <Field name="mnum" label="Member Number *" value={memberNumber} onChange={setMemberNumber} disabled={mode === "edit"} placeholder="830XXXX" />
+          <Field name="mnum" label="Member Number *" value={memberNumber} onChange={setMemberNumber} disabled={mode === "edit"} placeholder="Member ID" />
           <Field name="mpass" label={mode === "add" ? "Password *" : "Password"} value={passcode} onChange={setPasscode} placeholder={mode === "edit" ? "Leave blank for no change" : ""} />
           <Field name="fname" label="First Name *" value={firstName} onChange={setFirstName} />
           <Field name="lname" label="Last Name *" value={lastName} onChange={setLastName} />

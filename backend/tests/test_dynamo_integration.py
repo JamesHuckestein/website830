@@ -25,7 +25,7 @@ def _token(member_number: str, passcode: str) -> str:
 
 
 def _officer_auth() -> dict:
-    return {"Authorization": f"Bearer {_token('8301002', 'charity830')}"}
+    return {"Authorization": f"Bearer {_token('4897307', 'koc830')}"}
 
 
 def _privileged_auth() -> dict:
@@ -38,7 +38,7 @@ def _privileged_auth() -> dict:
 
 def test_create_member_conditional_write_prevents_duplicate():
     body = {
-        "memberNumber": "8301001",
+        "memberNumber": "3418397",
         "passcode": "duplicate",
         "firstName": "Dup",
         "lastName": "Member",
@@ -155,11 +155,11 @@ def test_event_update_day_change_respects_max_3():
 # ---------------------------------------------------------------------------
 
 def test_officer_swap_updates_member_positions():
-    member = members_repo.get_by_number("8301002")
+    member = members_repo.get_by_number("4897307")
     assert member.get("officer_position") == "Grand Knight"
 
     officer = officers_repo.get_by_title("Grand Knight")
-    assert officer["member_number"] == "8301002"
+    assert officer["member_number"] == "4897307"
     assert "Akers" in officer["name"]
 
 
@@ -173,8 +173,8 @@ def test_officer_assignment_clears_old_member():
         b"\r\n\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
     )
 
-    old_member = "8301002"
-    new_member = "8301015"
+    old_member = "4897307"
+    new_member = "4606798"
 
     body = {
         "memberNumber": new_member,
@@ -195,7 +195,7 @@ def test_officer_assignment_clears_old_member():
 
 
 def test_delete_member_clears_officer_slot():
-    officer_member = "8301002"
+    officer_member = "4897307"
     r = client.delete(f"/members/{officer_member}", headers=_privileged_auth())
     assert r.status_code == 200
 
@@ -211,7 +211,7 @@ def test_delete_member_clears_officer_slot():
 def test_prayer_request_delete_owner_check():
     from app.repos import prayer_requests as prayer_requests_repo
 
-    headers_creator = {"Authorization": f"Bearer {_token('8301002', 'charity830')}"}
+    headers_creator = {"Authorization": f"Bearer {_token('4897307', 'koc830')}"}
     r = client.post("/prayer-requests", json={"text": "Test prayer"}, headers=headers_creator)
     assert r.status_code == 200
 
@@ -219,7 +219,7 @@ def test_prayer_request_delete_owner_check():
     new_request = next(pr for pr in requests if pr["text"] == "Test prayer")
 
     # 8301015 is a non-officer member — should be forbidden from deleting others' requests
-    headers_other = {"Authorization": f"Bearer {_token('8301015', 'hope830')}"}
+    headers_other = {"Authorization": f"Bearer {_token('4606798', 'koc830')}"}
     r = client.delete(f"/prayer-requests/{new_request['id']}", headers=headers_other)
     assert r.status_code == 403
 
@@ -228,7 +228,7 @@ def test_prayer_request_delete_owner_check():
 
 
 def test_prayer_request_officer_can_delete_others():
-    headers_creator = {"Authorization": f"Bearer {_token('8301015', 'hope830')}"}
+    headers_creator = {"Authorization": f"Bearer {_token('4606798', 'koc830')}"}
     r = client.post("/prayer-requests", json={"text": "Officer delete test"}, headers=headers_creator)
     assert r.status_code == 200
 

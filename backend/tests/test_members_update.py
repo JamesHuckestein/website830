@@ -17,16 +17,16 @@ def _token(member_number: str, passcode: str) -> str:
 
 
 def _privileged_auth() -> dict:
-    return {"Authorization": f"Bearer {_token('8301002', 'charity830')}"}
+    return {"Authorization": f"Bearer {_token('4897307', 'koc830')}"}
 
 
 def _non_officer_auth() -> dict:
-    return {"Authorization": f"Bearer {_token('8301015', 'hope830')}"}
+    return {"Authorization": f"Bearer {_token('4606798', 'koc830')}"}
 
 
 def _non_privileged_officer_auth() -> dict:
     token = pyjwt.encode(
-        {"sub": "8301003", "isOfficer": True, "officerPosition": "Chancellor"},
+        {"sub": "2486615", "isOfficer": True, "officerPosition": "Chancellor"},
         _JWT_SECRET,
         algorithm="HS256",
     )
@@ -35,7 +35,7 @@ def _non_privileged_officer_auth() -> dict:
 
 def _valid_create_body() -> dict:
     return {
-        "memberNumber": "8309999",
+        "memberNumber": "9999999",
         "passcode": "newpass123",
         "firstName": "New",
         "lastName": "Member",
@@ -67,7 +67,7 @@ def test_create_member_success():
 
     members_r = client.get("/members", headers=_privileged_auth())
     numbers = [m["memberNumber"] for m in members_r.json()]
-    assert "8309999" in numbers
+    assert "9999999" in numbers
 
 
 def test_create_member_duplicate_number():
@@ -120,7 +120,7 @@ def test_create_member_unauthorized_no_token():
 
 def test_update_member_full_success():
     body = {
-        "memberNumber": "8301015",
+        "memberNumber": "4606798",
         "passcode": None,
         "firstName": "Tommy",
         "lastName": "Wilson",
@@ -137,12 +137,12 @@ def test_update_member_full_success():
         "thirdDegreeDate": "2020-06-12",
         "fourthDegreeDate": "2021-01-15",
     }
-    r = client.put("/members/8301015/full", json=body, headers=_privileged_auth())
+    r = client.put("/members/4606798/full", json=body, headers=_privileged_auth())
     assert r.status_code == 200
     data = r.json()
     assert data["success"] is True
 
-    member_r = client.get("/members/8301015", headers=_privileged_auth())
+    member_r = client.get("/members/4606798", headers=_privileged_auth())
     m = member_r.json()
     assert m["firstName"] == "Tommy"
     assert m["addressStreet"] == "999 New St"
@@ -150,9 +150,9 @@ def test_update_member_full_success():
 
 
 def test_update_member_full_blank_passcode_no_change():
-    original_passcode = members_repo.get_by_number("8301015")["passcode"]
+    original_passcode = members_repo.get_by_number("4606798")["passcode"]
     body = {
-        "memberNumber": "8301015",
+        "memberNumber": "4606798",
         "passcode": None,
         "firstName": "Thomas",
         "lastName": "Wilson",
@@ -169,16 +169,16 @@ def test_update_member_full_blank_passcode_no_change():
         "thirdDegreeDate": "2020-06-12",
         "fourthDegreeDate": None,
     }
-    r = client.put("/members/8301015/full", json=body, headers=_privileged_auth())
+    r = client.put("/members/4606798/full", json=body, headers=_privileged_auth())
     assert r.status_code == 200
 
-    current_passcode = members_repo.get_by_number("8301015")["passcode"]
+    current_passcode = members_repo.get_by_number("4606798")["passcode"]
     assert current_passcode == original_passcode
 
 
 def test_update_member_full_new_passcode():
     body = {
-        "memberNumber": "8301015",
+        "memberNumber": "4606798",
         "passcode": "newpassword",
         "firstName": "Thomas",
         "lastName": "Wilson",
@@ -195,16 +195,16 @@ def test_update_member_full_new_passcode():
         "thirdDegreeDate": "2020-06-12",
         "fourthDegreeDate": None,
     }
-    r = client.put("/members/8301015/full", json=body, headers=_privileged_auth())
+    r = client.put("/members/4606798/full", json=body, headers=_privileged_auth())
     assert r.status_code == 200
 
-    current_passcode = members_repo.get_by_number("8301015")["passcode"]
+    current_passcode = members_repo.get_by_number("4606798")["passcode"]
     assert current_passcode == "newpassword"
 
 
 def test_update_member_full_not_found():
     body = {
-        "memberNumber": "8309999",
+        "memberNumber": "9999999",
         "passcode": None,
         "firstName": "Nobody",
         "lastName": "Here",
@@ -221,13 +221,13 @@ def test_update_member_full_not_found():
         "thirdDegreeDate": "2020-03-01",
         "fourthDegreeDate": None,
     }
-    r = client.put("/members/8309999/full", json=body, headers=_privileged_auth())
+    r = client.put("/members/9999999/full", json=body, headers=_privileged_auth())
     assert r.status_code == 404
 
 
 def test_update_member_full_conflict_on_number_change():
     body = {
-        "memberNumber": "8301002",
+        "memberNumber": "4897307",
         "passcode": None,
         "firstName": "Thomas",
         "lastName": "Wilson",
@@ -244,13 +244,13 @@ def test_update_member_full_conflict_on_number_change():
         "thirdDegreeDate": "2020-06-12",
         "fourthDegreeDate": None,
     }
-    r = client.put("/members/8301015/full", json=body, headers=_privileged_auth())
+    r = client.put("/members/4606798/full", json=body, headers=_privileged_auth())
     assert r.status_code == 409
 
 
 def test_update_member_full_forbidden_non_officer():
     body = {
-        "memberNumber": "8301015",
+        "memberNumber": "4606798",
         "passcode": None,
         "firstName": "Thomas",
         "lastName": "Wilson",
@@ -267,13 +267,13 @@ def test_update_member_full_forbidden_non_officer():
         "thirdDegreeDate": "2020-06-12",
         "fourthDegreeDate": None,
     }
-    r = client.put("/members/8301015/full", json=body, headers=_non_officer_auth())
+    r = client.put("/members/4606798/full", json=body, headers=_non_officer_auth())
     assert r.status_code == 403
 
 
 def test_update_member_full_forbidden_non_privileged_officer():
     body = {
-        "memberNumber": "8301015",
+        "memberNumber": "4606798",
         "passcode": None,
         "firstName": "Thomas",
         "lastName": "Wilson",
@@ -290,7 +290,7 @@ def test_update_member_full_forbidden_non_privileged_officer():
         "thirdDegreeDate": "2020-06-12",
         "fourthDegreeDate": None,
     }
-    r = client.put("/members/8301015/full", json=body, headers=_non_privileged_officer_auth())
+    r = client.put("/members/4606798/full", json=body, headers=_non_privileged_officer_auth())
     assert r.status_code == 403
 
 
@@ -299,23 +299,23 @@ def test_update_member_full_forbidden_non_privileged_officer():
 # ---------------------------------------------------------------------------
 
 def test_delete_member_success():
-    r = client.delete("/members/8301015", headers=_privileged_auth())
+    r = client.delete("/members/4606798", headers=_privileged_auth())
     assert r.status_code == 200
     data = r.json()
     assert data["success"] is True
 
     members_r = client.get("/members", headers=_privileged_auth())
     numbers = [m["memberNumber"] for m in members_r.json()]
-    assert "8301015" not in numbers
+    assert "4606798" not in numbers
 
 
 def test_delete_member_not_found():
-    r = client.delete("/members/8309999", headers=_privileged_auth())
+    r = client.delete("/members/9999999", headers=_privileged_auth())
     assert r.status_code == 404
 
 
 def test_delete_member_clears_officer_slot():
-    officer_member = "8301002"
+    officer_member = "4897307"
     r = client.delete(f"/members/{officer_member}", headers=_privileged_auth())
     assert r.status_code == 200
 
@@ -325,17 +325,17 @@ def test_delete_member_clears_officer_slot():
 
 
 def test_delete_member_forbidden_non_officer():
-    r = client.delete("/members/8301015", headers=_non_officer_auth())
+    r = client.delete("/members/4606798", headers=_non_officer_auth())
     assert r.status_code == 403
 
 
 def test_delete_member_forbidden_non_privileged_officer():
-    r = client.delete("/members/8301015", headers=_non_privileged_officer_auth())
+    r = client.delete("/members/4606798", headers=_non_privileged_officer_auth())
     assert r.status_code == 403
 
 
 def test_delete_member_unauthorized_no_token():
-    r = client.delete("/members/8301015")
+    r = client.delete("/members/4606798")
     assert r.status_code == 401
 
 
@@ -355,7 +355,7 @@ def test_privileged_officer_cannot_delete_admin():
 
 def test_privileged_officer_cannot_edit_admin():
     body = _valid_create_body()
-    body["memberNumber"] = "8309999"
+    body["memberNumber"] = "9999999"
     r = client.put("/members/830999999/full", json=body, headers=_privileged_auth())
     assert r.status_code == 403
     assert "admin" in r.json()["detail"].lower()
@@ -368,13 +368,13 @@ def test_admin_can_create_member():
 
 def test_admin_can_edit_regular_member():
     body = _valid_create_body()
-    body["memberNumber"] = "8301015"
-    r = client.put("/members/8301015/full", json=body, headers=_admin_auth())
+    body["memberNumber"] = "4606798"
+    r = client.put("/members/4606798/full", json=body, headers=_admin_auth())
     assert r.status_code == 200
 
 
 def test_admin_can_delete_regular_member():
-    r = client.delete("/members/8301015", headers=_admin_auth())
+    r = client.delete("/members/4606798", headers=_admin_auth())
     assert r.status_code == 200
 
 
