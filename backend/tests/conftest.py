@@ -97,7 +97,10 @@ def _seed_tables():
 @pytest.fixture(autouse=True)
 def dynamo_tables():
     """Create moto-mocked DynamoDB tables and seed them for each test."""
+    from app.dynamo import _reset_resource
     with mock_aws():
+        _reset_resource()
         _create_tables()
         _seed_tables()
         yield
+        _reset_resource()

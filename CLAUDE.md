@@ -104,8 +104,11 @@ Tests use `moto[dynamodb]` to mock DynamoDB in-process (no Docker/Java required)
 | `DYNAMO_TABLE_PREFIX` | `koc830-dev-` | `koc830-prod-` |
 | `DYNAMO_ENDPOINT_URL` | `http://localhost:8000` (DynamoDB Local) or omit (moto in tests) | omit (uses AWS default) |
 | `AWS_REGION` | `us-east-1` | `us-east-1` |
-| `JWT_SECRET` | `dev-secret-change-in-production!!` | (real secret) |
-| `EMAIL_GATEWAY_URL` | omit (stub logging) | API Gateway URL |
+| `JWT_SECRET` | `dev-secret-change-in-production!!` | (not needed — Cognito handles tokens) |
+| `COGNITO_USER_POOL_ID` | omit (falls back to self-signed JWT) | Cognito User Pool ID |
+| `COGNITO_APP_CLIENT_ID` | omit | Cognito App Client ID |
+| `CORS_ORIGINS` | `http://localhost:3000` | CloudFront domain URL |
+| `EMAIL_GATEWAY_URL` | omit (stub logging) | Email Lambda function URL |
 
 ## Future Work
 

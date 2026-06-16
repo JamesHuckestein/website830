@@ -10,6 +10,7 @@ type MembersAreaProps = {
 
 const baseLinks: { id: MemberSubSection; label: string }[] = [
   { id: "contactInfo",     label: "Contact Information" },
+  { id: "changePassword",  label: "Change Password" },
   { id: "birthdays",       label: "Birthdays" },
   { id: "prayerRequests",  label: "Prayer Requests" },
   { id: "memberList",      label: "Member List" },

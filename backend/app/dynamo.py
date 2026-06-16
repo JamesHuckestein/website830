@@ -9,11 +9,23 @@ _ENDPOINT_URL = os.getenv("DYNAMO_ENDPOINT_URL")
 _REGION = os.getenv("AWS_REGION", "us-east-1")
 
 
+_resource_instance = None
+
+
 def _resource():
-    kwargs: dict[str, Any] = {"region_name": _REGION}
-    if _ENDPOINT_URL:
-        kwargs["endpoint_url"] = _ENDPOINT_URL
-    return boto3.resource("dynamodb", **kwargs)
+    global _resource_instance
+    if _resource_instance is None:
+        kwargs: dict[str, Any] = {"region_name": _REGION}
+        if _ENDPOINT_URL:
+            kwargs["endpoint_url"] = _ENDPOINT_URL
+        _resource_instance = boto3.resource("dynamodb", **kwargs)
+    return _resource_instance
+
+
+def _reset_resource():
+    """Reset the cached resource (used by tests with moto)."""
+    global _resource_instance
+    _resource_instance = None
 
 
 def _table(name: str):

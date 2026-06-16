@@ -3,6 +3,7 @@ import { AnnouncementsUpdate } from "@/components/AnnouncementsUpdate";
 import { BirthdayList } from "@/components/BirthdayList";
 import { Calendar } from "@/components/Calendar";
 import { CalendarUpdates } from "@/components/CalendarUpdates";
+import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { ContactInfoForm } from "@/components/ContactInfoForm";
 import { HomeCarousel } from "@/components/HomeCarousel";
 import { MeetingMinutes } from "@/components/MeetingMinutes";
@@ -83,6 +84,9 @@ export function MainPanel({
 
     if (memberSubSection === "contactInfo") {
       return <ContactInfoForm token={token!} memberNumber={memberNumber!} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "changePassword") {
+      return <ChangePasswordForm token={token!} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "birthdays") {
       return <BirthdayList token={token!} onBack={onBackToMembersArea} />;

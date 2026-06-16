@@ -55,6 +55,25 @@ Resources:
               - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}officers"
               - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}events"
 
+  CognitoAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${TablePrefix}cognito-access"
+      Description: Cognito access for backend authentication
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CognitoAuth
+            Effect: Allow
+            Action:
+              - cognito-idp:InitiateAuth
+              - cognito-idp:AdminInitiateAuth
+              - cognito-idp:AdminGetUser
+              - cognito-idp:AdminCreateUser
+              - cognito-idp:AdminSetUserPassword
+              - cognito-idp:AdminUpdateUserAttributes
+            Resource: !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*"
+
   BackendRole:
     Type: AWS::IAM::Role
     Properties:
@@ -70,6 +89,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Ref DynamoDBAccessPolicy
+        - !Ref CognitoAccessPolicy
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
 Outputs:

@@ -37,6 +37,7 @@ export type MemberSubSection =
   | "announcementsUpdate"
   | "editPhotoGallery"
   | "updateOfficers"
+  | "changePassword"
   | "adminPassword";
 
 export const OFFICER_TITLES = [

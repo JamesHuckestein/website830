@@ -28,9 +28,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="KoC Council 830 API")
 
+_CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -38,6 +39,9 @@ app.add_middleware(
 _JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-in-production!!")
 _JWT_ALGORITHM = "HS256"
 _EMAIL_GATEWAY_URL = os.getenv("EMAIL_GATEWAY_URL")
+_COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID")
+_COGNITO_APP_CLIENT_ID = os.getenv("COGNITO_APP_CLIENT_ID")
+_COGNITO_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 OFFICER_TITLES = {
     "Grand Knight", "Deputy Grand Knight", "Chancellor", "Advocate",
@@ -240,6 +244,11 @@ class UpdateMemberFullRequest(_MemberBody):
     passcode: str | None = None
 
 
+class ChangePasswordRequest(BaseModel):
+    currentPassword: str = Field(min_length=1)
+    newPassword: str = Field(min_length=8)
+
+
 class AdminPasswordUpdateRequest(BaseModel):
     passcode: str = Field(min_length=1)
 
@@ -248,9 +257,51 @@ class AdminPasswordUpdateRequest(BaseModel):
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-def _require_auth(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> dict:
+_cognito_jwks: dict | None = None
+
+
+def _get_cognito_jwks() -> dict:
+    global _cognito_jwks
+    if _cognito_jwks is None:
+        import urllib.request
+        jwks_url = f"https://cognito-idp.{_COGNITO_REGION}.amazonaws.com/{_COGNITO_USER_POOL_ID}/.well-known/jwks.json"
+        with urllib.request.urlopen(jwks_url) as resp:
+            _cognito_jwks = __import__("json").loads(resp.read())
+    return _cognito_jwks
+
+
+def _validate_cognito_token(token: str) -> dict:
+    from jose import jwt as jose_jwt, JWTError
+    jwks = _get_cognito_jwks()
     try:
-        return jwt.decode(credentials.credentials, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
+        payload = jose_jwt.decode(
+            token,
+            jwks,
+            algorithms=["RS256"],
+            audience=_COGNITO_APP_CLIENT_ID,
+            issuer=f"https://cognito-idp.{_COGNITO_REGION}.amazonaws.com/{_COGNITO_USER_POOL_ID}",
+        )
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    member_number = payload.get("sub") or payload.get("username")
+    member = members_repo.get_by_number(member_number)
+    if member is None:
+        raise HTTPException(status_code=401, detail="Member not found")
+    is_admin = member.get("is_admin", False)
+    return {
+        "sub": member_number,
+        "isOfficer": _is_officer(member.get("officer_position")) or is_admin,
+        "officerPosition": member.get("officer_position"),
+        "isAdmin": is_admin,
+    }
+
+
+def _require_auth(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> dict:
+    token = credentials.credentials
+    if _COGNITO_USER_POOL_ID:
+        return _validate_cognito_token(token)
+    try:
+        return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -391,6 +442,8 @@ def health():
 
 @app.post("/auth/login")
 def login(body: LoginRequest):
+    if _COGNITO_USER_POOL_ID:
+        return _cognito_login(body.membershipNumber, body.passcode)
     member = members_repo.get_by_number(body.membershipNumber)
     if member is None or member.get("passcode") != body.passcode:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -405,6 +458,31 @@ def login(body: LoginRequest):
         _JWT_SECRET,
         algorithm=_JWT_ALGORITHM,
     )
+    return {"token": token}
+
+
+def _cognito_login(username: str, password: str) -> dict:
+    import boto3
+    client = boto3.client("cognito-idp", region_name=_COGNITO_REGION)
+    try:
+        resp = client.initiate_auth(
+            ClientId=_COGNITO_APP_CLIENT_ID,
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={"USERNAME": username, "PASSWORD": password},
+        )
+    except client.exceptions.NotAuthorizedException:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    except client.exceptions.UserNotFoundException:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    except client.exceptions.UserNotConfirmedException:
+        raise HTTPException(status_code=401, detail="Account not confirmed")
+    result = resp.get("AuthenticationResult", {})
+    token = result.get("AccessToken") or result.get("IdToken")
+    if not token:
+        challenge = resp.get("ChallengeName")
+        if challenge == "NEW_PASSWORD_REQUIRED":
+            raise HTTPException(status_code=401, detail="Password change required")
+        raise HTTPException(status_code=401, detail="Authentication failed")
     return {"token": token}
 
 
@@ -489,6 +567,8 @@ def create_member(body: CreateMemberRequest, _payload: dict = Depends(_require_p
     }
     if not members_repo.create(item):
         raise HTTPException(status_code=409, detail="A member with that number already exists.")
+    if _COGNITO_USER_POOL_ID:
+        _cognito_create_user(body.memberNumber, body.passcode, body.email)
     return {"success": True, "message": "Member added successfully."}
 
 
@@ -528,6 +608,8 @@ def update_member_full(member_id: str, body: UpdateMemberFullRequest, _payload: 
         members_repo.create(fields)
     else:
         members_repo.update_full(member_id, fields)
+    if body.passcode and _COGNITO_USER_POOL_ID:
+        _cognito_set_password(member_id, body.passcode)
     return {"success": True, "message": "Member updated successfully."}
 
 
@@ -541,6 +623,8 @@ def delete_member(member_id: str, _payload: dict = Depends(_require_privileged_o
     members_repo.delete(member_id)
     if member.get("officer_position"):
         officers_repo.clear_slot(member["officer_position"])
+    if _COGNITO_USER_POOL_ID:
+        _cognito_delete_user(member_id)
     return {"success": True, "message": "Member deleted successfully."}
 
 
@@ -548,10 +632,92 @@ def delete_member(member_id: str, _payload: dict = Depends(_require_privileged_o
 def update_admin_password(body: AdminPasswordUpdateRequest, payload: dict = Depends(_require_auth)):
     if not payload.get("isAdmin"):
         raise HTTPException(status_code=403, detail="Admin access required.")
-    result = members_repo.update_passcode(ADMIN_MEMBER_NUMBER, body.passcode)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Admin account not found.")
+    if _COGNITO_USER_POOL_ID:
+        _cognito_set_password(ADMIN_MEMBER_NUMBER, body.passcode)
+    else:
+        result = members_repo.update_passcode(ADMIN_MEMBER_NUMBER, body.passcode)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Admin account not found.")
     return {"success": True, "message": "Password updated successfully."}
+
+
+@app.put("/members/change-password")
+def change_password(body: ChangePasswordRequest, payload: dict = Depends(_require_auth)):
+    member_number = payload["sub"]
+    if _COGNITO_USER_POOL_ID:
+        _cognito_change_password(member_number, body.currentPassword, body.newPassword)
+    else:
+        member = members_repo.get_by_number(member_number)
+        if member is None or member.get("passcode") != body.currentPassword:
+            raise HTTPException(status_code=401, detail="Current password is incorrect.")
+        members_repo.update_passcode(member_number, body.newPassword)
+    return {"success": True, "message": "Password changed successfully."}
+
+
+def _cognito_change_password(username: str, current_password: str, new_password: str) -> None:
+    import boto3
+    client = boto3.client("cognito-idp", region_name=_COGNITO_REGION)
+    try:
+        resp = client.initiate_auth(
+            ClientId=_COGNITO_APP_CLIENT_ID,
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={"USERNAME": username, "PASSWORD": current_password},
+        )
+    except (client.exceptions.NotAuthorizedException, client.exceptions.UserNotFoundException):
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    access_token = resp.get("AuthenticationResult", {}).get("AccessToken")
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    try:
+        client.change_password(
+            PreviousPassword=current_password,
+            ProposedPassword=new_password,
+            AccessToken=access_token,
+        )
+    except client.exceptions.InvalidPasswordException as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+def _cognito_set_password(username: str, new_password: str) -> None:
+    import boto3
+    client = boto3.client("cognito-idp", region_name=_COGNITO_REGION)
+    client.admin_set_user_password(
+        UserPoolId=_COGNITO_USER_POOL_ID,
+        Username=username,
+        Password=new_password,
+        Permanent=True,
+    )
+
+
+def _cognito_delete_user(username: str) -> None:
+    import boto3
+    client = boto3.client("cognito-idp", region_name=_COGNITO_REGION)
+    try:
+        client.admin_delete_user(UserPoolId=_COGNITO_USER_POOL_ID, Username=username)
+    except client.exceptions.UserNotFoundException:
+        pass
+
+
+def _cognito_create_user(username: str, password: str, email: str = "") -> None:
+    import boto3
+    client = boto3.client("cognito-idp", region_name=_COGNITO_REGION)
+    user_attrs = []
+    if email:
+        user_attrs.append({"Name": "email", "Value": email})
+        user_attrs.append({"Name": "email_verified", "Value": "true"})
+    client.admin_create_user(
+        UserPoolId=_COGNITO_USER_POOL_ID,
+        Username=username,
+        UserAttributes=user_attrs,
+        TemporaryPassword=password,
+        MessageAction="SUPPRESS",
+    )
+    client.admin_set_user_password(
+        UserPoolId=_COGNITO_USER_POOL_ID,
+        Username=username,
+        Password=password,
+        Permanent=True,
+    )
 
 
 @app.get("/prayer-requests")

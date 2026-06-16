@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: KoC Council 830 — Email sending Lambda (SES)
+
+Parameters:
+  TablePrefix:
+    Type: String
+    Default: koc830-prod-
+  FromAddress:
+    Type: String
+    Description: SES-verified sender email address (e.g., noreply@koc830.org)
+  S3CodeBucket:
+    Type: String
+    Description: S3 bucket containing the Lambda deployment package
+  S3CodeKey:
+    Type: String
+    Default: lambda/email-handler.zip
+    Description: S3 key for the email Lambda zip
+
+Resources:
+
+  EmailRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${TablePrefix}email-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SESsend
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    "ses:FromAddress": !Ref FromAddress
+
+  EmailFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${TablePrefix}email"
+      Runtime: python3.13
+      Handler: email_handler.lambda_handler
+      Role: !GetAtt EmailRole.Arn
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          FROM_ADDRESS: !Ref FromAddress
+
+  EmailFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref EmailFunction
+      AuthType: AWS_IAM
+
+  EmailFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref EmailFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+      FunctionUrlAuthType: AWS_IAM
+
+Outputs:
+  EmailGatewayUrl:
+    Value: !GetAtt EmailFunctionUrl.FunctionUrl
+    Description: Email Lambda function URL (pass to main backend as EMAIL_GATEWAY_URL)
+  EmailFunctionName:
+    Value: !Ref EmailFunction

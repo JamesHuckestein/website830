@@ -395,3 +395,10 @@ export async function updateAdminPassword(token: string, passcode: string): Prom
     body: JSON.stringify({ passcode }),
   });
 }
+
+export async function changePassword(token: string, currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>("/members/change-password", token, {
+    method: "PUT",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
