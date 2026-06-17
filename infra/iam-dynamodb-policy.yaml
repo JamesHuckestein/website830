@@ -55,6 +55,23 @@ Resources:
               - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}officers"
               - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}events"
 
+  S3AssetsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${TablePrefix}s3-assets-access"
+      Description: S3 access for koc830-assets bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: S3Assets
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              - "arn:aws:s3:::koc830-assets/*"
+
   CognitoAccessPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -89,6 +106,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Ref DynamoDBAccessPolicy
+        - !Ref S3AssetsPolicy
         - !Ref CognitoAccessPolicy
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 

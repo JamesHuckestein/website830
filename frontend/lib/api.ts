@@ -106,14 +106,22 @@ async function apiFetch<T>(path: string, token: string, init?: RequestInit): Pro
   return res.json() as Promise<T>;
 }
 
-export async function loginMember(membershipNumber: string, passcode: string): Promise<{ token: string }> {
+export type LoginResponse = {
+  token: string;
+  memberNumber?: string;
+  isOfficer?: boolean;
+  officerPosition?: string | null;
+  isAdmin?: boolean;
+};
+
+export async function loginMember(membershipNumber: string, passcode: string): Promise<LoginResponse> {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ membershipNumber, passcode }),
   });
   if (!res.ok) throw new Error("Invalid credentials");
-  return res.json() as Promise<{ token: string }>;
+  return res.json() as Promise<LoginResponse>;
 }
 
 export async function getMembers(token: string): Promise<MemberResponse[]> {
@@ -366,6 +374,29 @@ export async function getMeetingMinutes(token: string): Promise<MeetingMinutesSu
 
 export async function getMeetingMinutesDetail(token: string, id: string): Promise<MeetingMinutesDetail> {
   return apiFetch<MeetingMinutesDetail>(`/meeting-minutes/${id}`, token);
+}
+
+export async function createMeetingMinutes(token: string, title: string, meetingDate: string, file: globalThis.File): Promise<{ success: boolean; message: string; id?: string }> {
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("meetingDate", meetingDate);
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/meeting-minutes`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+    throw new Error(err.detail || "Upload failed");
+  }
+  return res.json();
+}
+
+export async function deleteMeetingMinutes(token: string, id: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/meeting-minutes/${id}`, token, {
+    method: "DELETE",
+  });
 }
 
 export async function emailOfficer(token: string, officerTitle: string, message: string): Promise<{ success: boolean; message: string }> {

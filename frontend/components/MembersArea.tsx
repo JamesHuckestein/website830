@@ -23,6 +23,7 @@ const officerOnlyLinks: { id: MemberSubSection; label: string }[] = [
   { id: "calendarUpdates",     label: "Calendar Updates" },
   { id: "announcementsUpdate", label: "Edit Announcements" },
   { id: "editPhotoGallery",    label: "Edit Photo Gallery" },
+  { id: "editMeetingMinutes",  label: "Edit Meeting Minutes" },
 ];
 
 const privilegedOfficerLinks: { id: MemberSubSection; label: string }[] = [

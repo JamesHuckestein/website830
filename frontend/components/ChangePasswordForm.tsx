@@ -51,7 +51,15 @@ export function ChangePasswordForm({ token, onBack }: ChangePasswordFormProps) {
 
   return (
     <section className="space-y-6">
-      <h2 className="text-2xl font-semibold text-[#032147]">Change Password</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-semibold text-[#032147]">Change Password</h2>
+        <button
+          onClick={onBack}
+          className="rounded-md border border-[#888888] px-3 py-1 text-sm font-semibold text-[#032147]"
+        >
+          Back
+        </button>
+      </div>
       <form onSubmit={handleSubmit} className="max-w-md space-y-4">
         <div className="space-y-1">
           <label htmlFor="current-password" className="block text-sm font-medium text-[#032147]">

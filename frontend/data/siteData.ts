@@ -37,6 +37,7 @@ export type MemberSubSection =
   | "announcementsUpdate"
   | "editPhotoGallery"
   | "updateOfficers"
+  | "editMeetingMinutes"
   | "changePassword"
   | "adminPassword";
 

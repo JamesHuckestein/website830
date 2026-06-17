@@ -8,7 +8,7 @@ from datetime import date, datetime, time, timedelta, timezone
 
 import httpx
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -278,12 +278,12 @@ def _validate_cognito_token(token: str) -> dict:
             token,
             jwks,
             algorithms=["RS256"],
-            audience=_COGNITO_APP_CLIENT_ID,
             issuer=f"https://cognito-idp.{_COGNITO_REGION}.amazonaws.com/{_COGNITO_USER_POOL_ID}",
+            options={"verify_aud": False},
         )
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    member_number = payload.get("sub") or payload.get("username")
+    member_number = payload.get("username") or payload.get("sub")
     member = members_repo.get_by_number(member_number)
     if member is None:
         raise HTTPException(status_code=401, detail="Member not found")
@@ -483,7 +483,16 @@ def _cognito_login(username: str, password: str) -> dict:
         if challenge == "NEW_PASSWORD_REQUIRED":
             raise HTTPException(status_code=401, detail="Password change required")
         raise HTTPException(status_code=401, detail="Authentication failed")
-    return {"token": token}
+    member = members_repo.get_by_number(username)
+    is_admin = member.get("is_admin", False) if member else False
+    officer_position = member.get("officer_position") if member else None
+    return {
+        "token": token,
+        "memberNumber": username,
+        "isOfficer": _is_officer(officer_position) or is_admin,
+        "officerPosition": officer_position,
+        "isAdmin": is_admin,
+    }
 
 
 @app.get("/members/birthdays")
@@ -525,6 +534,19 @@ def get_member(member_id: str, _payload: dict = Depends(_require_auth)):
     if _is_admin_member(member) and not _payload.get("isAdmin"):
         raise HTTPException(status_code=404, detail="Member not found")
     return _member_to_response(member)
+
+
+@app.put("/members/change-password")
+def change_password(body: ChangePasswordRequest, payload: dict = Depends(_require_auth)):
+    member_number = payload["sub"]
+    if _COGNITO_USER_POOL_ID:
+        _cognito_change_password(member_number, body.currentPassword, body.newPassword)
+    else:
+        member = members_repo.get_by_number(member_number)
+        if member is None or member.get("passcode") != body.currentPassword:
+            raise HTTPException(status_code=401, detail="Current password is incorrect.")
+        members_repo.update_passcode(member_number, body.newPassword)
+    return {"success": True, "message": "Password changed successfully."}
 
 
 @app.put("/members/{member_id}")
@@ -639,19 +661,6 @@ def update_admin_password(body: AdminPasswordUpdateRequest, payload: dict = Depe
         if result is None:
             raise HTTPException(status_code=404, detail="Admin account not found.")
     return {"success": True, "message": "Password updated successfully."}
-
-
-@app.put("/members/change-password")
-def change_password(body: ChangePasswordRequest, payload: dict = Depends(_require_auth)):
-    member_number = payload["sub"]
-    if _COGNITO_USER_POOL_ID:
-        _cognito_change_password(member_number, body.currentPassword, body.newPassword)
-    else:
-        member = members_repo.get_by_number(member_number)
-        if member is None or member.get("passcode") != body.currentPassword:
-            raise HTTPException(status_code=401, detail="Current password is incorrect.")
-        members_repo.update_passcode(member_number, body.newPassword)
-    return {"success": True, "message": "Password changed successfully."}
 
 
 def _cognito_change_password(username: str, current_password: str, new_password: str) -> None:
@@ -773,8 +782,66 @@ def get_meeting_minutes_detail(minutes_id: str, _payload: dict = Depends(_requir
     entry = meeting_minutes_repo.get_by_id(minutes_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Meeting minutes not found")
-    logger.info("S3 stub: would generate pre-signed URL for %s", entry.get("s3_key", ""))
-    return {"id": entry["id"], "title": entry.get("title", ""), "meetingDate": entry.get("meeting_date", ""), "url": entry.get("s3_key", "")}
+    s3_key = entry.get("s3_key", "")
+    url = s3_key
+    if s3_key:
+        import boto3
+        s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": "koc830-assets", "Key": s3_key},
+            ExpiresIn=3600,
+        )
+    return {"id": entry["id"], "title": entry.get("title", ""), "meetingDate": entry.get("meeting_date", ""), "url": url}
+
+
+@app.post("/meeting-minutes")
+async def create_meeting_minutes(
+    title: str = Form(..., min_length=1, max_length=200),
+    meetingDate: str = Form(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    file: UploadFile = File(...),
+    payload: dict = Depends(_require_officer),
+):
+    try:
+        date.fromisoformat(meetingDate)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="meetingDate must be a valid YYYY-MM-DD date")
+    content = await file.read()
+    if not content[:5].startswith(b"%PDF"):
+        raise HTTPException(status_code=422, detail="Only PDF files are allowed.")
+    new_id = str(uuid.uuid4())
+    parsed_date = date.fromisoformat(meetingDate)
+    s3_key = f"meeting-minutes/{parsed_date.strftime('%Y/%m')}/{new_id}.pdf"
+    import boto3
+    s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+    s3.put_object(Bucket="koc830-assets", Key=s3_key, Body=content, ContentType="application/pdf")
+    now = _now_iso_precise()
+    record = {
+        "id": new_id,
+        "title": title,
+        "meeting_date": meetingDate,
+        "s3_key": s3_key,
+        "created_by": payload["sub"],
+        "created_at": now,
+    }
+    meeting_minutes_repo.create(record)
+    return {"success": True, "message": "Meeting minutes uploaded.", "id": new_id}
+
+
+@app.delete("/meeting-minutes/{minutes_id}")
+def delete_meeting_minutes(minutes_id: str, _payload: dict = Depends(_require_officer)):
+    entry = meeting_minutes_repo.get_by_id(minutes_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Meeting minutes not found.")
+    if entry.get("s3_key"):
+        import boto3
+        s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        try:
+            s3.delete_object(Bucket="koc830-assets", Key=entry["s3_key"])
+        except Exception:
+            logger.warning("Failed to delete S3 object: %s", entry["s3_key"])
+    meeting_minutes_repo.delete(minutes_id)
+    return {"success": True, "message": "Meeting minutes deleted."}
 
 
 @app.get("/events")

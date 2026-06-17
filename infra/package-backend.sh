@@ -20,11 +20,16 @@ ZIP_PATH="$ROOT/infra/backend-lambda.zip"
 echo "Packaging backend Lambda..."
 echo "  Build dir: $BUILD_DIR"
 
-pip install --quiet --target "$BUILD_DIR" \
+"$ROOT/backend/.venv/bin/pip" install --quiet --target "$BUILD_DIR" \
+    --platform manylinux2014_x86_64 \
+    --implementation cp \
+    --python-version 3.13 \
+    --only-binary=:all: \
     "fastapi>=0.115" \
     "mangum>=0.19" \
     "pyjwt>=2.10" \
     "python-jose[cryptography]>=3.3" \
+    "python-multipart>=0.0.9" \
     "httpx>=0.27" \
     "boto3>=1.35"
 
