@@ -31,9 +31,16 @@ export function MemberFormModal({ mode, member, submitting, error, onSave, onCan
   const [thirdDegreeDate, setThirdDegreeDate] = useState(member?.thirdDegreeDate ?? "");
   const [fourthDegreeDate, setFourthDegreeDate] = useState(member?.fourthDegreeDate ?? "");
 
+  const isValidPassword = (pw: string) =>
+    pw.length >= 8 && /[A-Z]/.test(pw) && /[a-z]/.test(pw) && /[0-9]/.test(pw);
+
+  const passwordProvided = passcode.trim() !== "";
+  const passwordValid = !passwordProvided || isValidPassword(passcode.trim());
+
   const requiredFilled =
     memberNumber.trim() !== "" &&
-    (mode === "edit" || passcode.trim() !== "") &&
+    (mode === "edit" || passwordProvided) &&
+    passwordValid &&
     firstName.trim() !== "" &&
     lastName.trim() !== "" &&
     addressStreet.trim() !== "" &&
@@ -79,6 +86,10 @@ export function MemberFormModal({ mode, member, submitting, error, onSave, onCan
         <form onSubmit={handleSubmit} autoComplete="off" className="space-y-3">
           <Field name="mnum" label="Member Number *" value={memberNumber} onChange={setMemberNumber} disabled={mode === "edit"} placeholder="Member ID" />
           <Field name="mpass" label={mode === "add" ? "Password *" : "Password"} value={passcode} onChange={setPasscode} placeholder={mode === "edit" ? "Leave blank for no change" : ""} />
+          <p className="text-xs text-[#888888]">Minimum 8 characters, must include uppercase, lowercase, and a number.</p>
+          {passwordProvided && !passwordValid && (
+            <p className="text-xs text-red-700">Password does not meet requirements.</p>
+          )}
           <Field name="fname" label="First Name *" value={firstName} onChange={setFirstName} />
           <Field name="lname" label="Last Name *" value={lastName} onChange={setLastName} />
           <Field name="mstreet" label="Street Address *" value={addressStreet} onChange={setAddressStreet} />

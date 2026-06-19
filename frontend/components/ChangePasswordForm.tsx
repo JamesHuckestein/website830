@@ -25,8 +25,8 @@ export function ChangePasswordForm({ token, onBack }: ChangePasswordFormProps) {
       setError("Current password is required.");
       return;
     }
-    if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters.");
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      setError("Password must be at least 8 characters and include uppercase, lowercase, and a number.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -86,6 +86,7 @@ export function ChangePasswordForm({ token, onBack }: ChangePasswordFormProps) {
             className="w-full rounded-md border border-[#888888] px-3 py-2 text-sm"
             disabled={submitting}
           />
+          <p className="text-xs text-[#888888]">Minimum 8 characters, must include uppercase, lowercase, and a number.</p>
         </div>
         <div className="space-y-1">
           <label htmlFor="confirm-new-password" className="block text-sm font-medium text-[#032147]">
