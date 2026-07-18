@@ -43,10 +43,6 @@ export function MemberFormModal({ mode, member, submitting, error, onSave, onCan
     passwordValid &&
     firstName.trim() !== "" &&
     lastName.trim() !== "" &&
-    addressStreet.trim() !== "" &&
-    addressCity.trim() !== "" &&
-    addressState.trim() !== "" &&
-    addressZip.trim() !== "" &&
     birthday !== "" &&
     firstDegreeDate !== "" &&
     secondDegreeDate !== "" &&
@@ -92,10 +88,10 @@ export function MemberFormModal({ mode, member, submitting, error, onSave, onCan
           )}
           <Field name="fname" label="First Name *" value={firstName} onChange={setFirstName} />
           <Field name="lname" label="Last Name *" value={lastName} onChange={setLastName} />
-          <Field name="mstreet" label="Street Address *" value={addressStreet} onChange={setAddressStreet} />
-          <Field name="mcity" label="City *" value={addressCity} onChange={setAddressCity} />
-          <Field name="mst" label="State *" value={addressState} onChange={setAddressState} maxLength={2} />
-          <Field name="mzip" label="Zip Code *" value={addressZip} onChange={setAddressZip} />
+          <Field name="mstreet" label="Street Address" value={addressStreet} onChange={setAddressStreet} />
+          <Field name="mcity" label="City" value={addressCity} onChange={setAddressCity} />
+          <Field name="mst" label="State" value={addressState} onChange={setAddressState} maxLength={2} />
+          <Field name="mzip" label="Zip Code" value={addressZip} onChange={setAddressZip} />
           <Field name="mphone" label="Phone" value={phone} onChange={setPhone} />
           <DateField name="mbday" label="Birthday *" value={birthday} onChange={setBirthday} />
           <Field name="memail" label="Email" value={email} onChange={setEmail} />
