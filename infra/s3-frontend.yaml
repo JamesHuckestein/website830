@@ -10,9 +10,18 @@ Parameters:
     Type: String
     Default: ""
     Description: API Gateway endpoint URL (e.g., https://abc123.execute-api.us-east-1.amazonaws.com). Leave empty for frontend-only deployment.
+  DomainName:
+    Type: String
+    Default: ""
+    Description: Custom domain name (e.g., koc830.org). Leave empty to use the default CloudFront domain.
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: ACM certificate ARN for the custom domain. Required when DomainName is set.
 
 Conditions:
   HasApi: !Not [!Equals [!Ref ApiGatewayUrl, ""]]
+  HasDomain: !Not [!Equals [!Ref DomainName, ""]]
 
 Resources:
 
@@ -54,6 +63,17 @@ Resources:
         DefaultRootObject: index.html
         HttpVersion: http2and3
         PriceClass: PriceClass_100
+        Aliases: !If
+          - HasDomain
+          - - !Ref DomainName
+            - !Sub "www.${DomainName}"
+          - !Ref "AWS::NoValue"
+        ViewerCertificate: !If
+          - HasDomain
+          - AcmCertificateArn: !Ref CertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
         Origins:
           - Id: S3Origin
             DomainName: !Sub "${BucketName}.s3.us-east-1.amazonaws.com"
@@ -135,6 +155,20 @@ Resources:
               AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
               CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
               OriginRequestPolicyId: !Ref ApiOriginRequestPolicy
+            - PathPattern: /officers/*.png
+              TargetOriginId: S3Origin
+              ViewerProtocolPolicy: redirect-to-https
+              AllowedMethods: [GET, HEAD]
+              CachedMethods: [GET, HEAD]
+              Compress: true
+              CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+            - PathPattern: /officers/*.jpg
+              TargetOriginId: S3Origin
+              ViewerProtocolPolicy: redirect-to-https
+              AllowedMethods: [GET, HEAD]
+              CachedMethods: [GET, HEAD]
+              Compress: true
+              CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
             - PathPattern: /officers/*
               TargetOriginId: ApiOrigin
               ViewerProtocolPolicy: redirect-to-https

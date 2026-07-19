@@ -3,7 +3,7 @@
 ## Infrastructure Decisions
 - **AWS Region:** us-east-1
 - **Hosting:** S3 static site + CloudFront CDN
-- **Domain:** TBD
+- **Domain:** koc830.org (+ www.koc830.org), ACM cert + CloudFront aliases + Route 53 alias records
 - **Auth:** AWS Cognito + Amplify (Parts 7+); demo stubs until then
 - **Database:** AWS RDS (Parts 6+); seed JSON until then
 - **Email:** AWS API Gateway → Lambda → SES (Part 8)
