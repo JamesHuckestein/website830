@@ -65,15 +65,15 @@ Resources:
     Type: AWS::Lambda::Url
     Properties:
       TargetFunctionArn: !Ref EmailFunction
-      AuthType: AWS_IAM
+      AuthType: NONE
 
   EmailFunctionUrlPermission:
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !Ref EmailFunction
       Action: lambda:InvokeFunctionUrl
-      Principal: !Sub "arn:aws:iam::${AWS::AccountId}:root"
-      FunctionUrlAuthType: AWS_IAM
+      Principal: "*"
+      FunctionUrlAuthType: NONE
 
 Outputs:
   EmailGatewayUrl:
