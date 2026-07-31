@@ -95,7 +95,7 @@ export function OfficerEditModal({ title, token, onClose, onSaved, onError }: Of
     if (!canSave || !photoFile) return;
     setSubmitting(true);
     try {
-      const base64 = await resizeImage(photoFile, 800);
+      const base64 = await resizeImage(photoFile, 350);
       const result = await updateOfficer(token, title, {
         memberNumber: selectedMember,
         photoData: base64,
