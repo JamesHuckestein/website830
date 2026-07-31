@@ -124,12 +124,16 @@ echo "[8/9] Updating Lambda CORS origins..."
 FUNCTION_NAME=$(aws cloudformation describe-stacks \
     --stack-name "${PREFIX}api" --region "$REGION" \
     --query "Stacks[0].Outputs[?OutputKey=='FunctionName'].OutputValue" --output text)
+EMAIL_URL=$(aws cloudformation describe-stacks \
+    --stack-name "${PREFIX}email" --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='EmailGatewayUrl'].OutputValue" --output text 2>/dev/null || echo "")
 aws lambda update-function-configuration \
     --function-name "$FUNCTION_NAME" \
-    --environment "Variables={DYNAMO_TABLE_PREFIX=$PREFIX,COGNITO_USER_POOL_ID=$COGNITO_POOL_ID,COGNITO_APP_CLIENT_ID=$COGNITO_CLIENT_ID,CORS_ORIGINS=$CF_URL,EMAIL_GATEWAY_URL=}" \
+    --environment "Variables={DYNAMO_TABLE_PREFIX=$PREFIX,COGNITO_USER_POOL_ID=$COGNITO_POOL_ID,COGNITO_APP_CLIENT_ID=$COGNITO_CLIENT_ID,CORS_ORIGINS=$CF_URL,EMAIL_GATEWAY_URL=$EMAIL_URL}" \
     --region "$REGION" \
     --output text --query "FunctionName"
 echo "  CORS updated to $CF_URL"
+echo "  Email URL: $EMAIL_URL"
 
 # 9. Build and deploy frontend
 echo "[9/9] Building and deploying frontend..."
