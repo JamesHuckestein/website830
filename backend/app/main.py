@@ -1074,6 +1074,8 @@ def get_officer_photo(filename: str):
         raise HTTPException(status_code=404, detail="Officer photo not found.")
     if isinstance(photo_data, str):
         photo_data = base64.b64decode(photo_data)
+    elif not isinstance(photo_data, bytes):
+        photo_data = bytes(photo_data)
     return Response(content=photo_data, media_type="image/png")
 
 
