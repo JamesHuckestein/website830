@@ -1,4 +1,5 @@
 import { AdminPasswordForm } from "@/components/AdminPasswordForm";
+import { AuxOfficerPrivileges } from "@/components/AuxOfficerPrivileges";
 import { AnnouncementsUpdate } from "@/components/AnnouncementsUpdate";
 import { BirthdayList } from "@/components/BirthdayList";
 import { Calendar } from "@/components/Calendar";
@@ -129,6 +130,9 @@ export function MainPanel({
     }
     if (memberSubSection === "updateOfficers" && isOfficer) {
       return <OfficersUpdate token={token!} onBack={onBackToMembersArea} />;
+    }
+    if (memberSubSection === "auxOfficerPrivileges" && isOfficer) {
+      return <AuxOfficerPrivileges token={token!} onBack={onBackToMembersArea} />;
     }
     if (memberSubSection === "adminPassword" && isAdmin) {
       return <AdminPasswordForm token={token!} onBack={onBackToMembersArea} />;

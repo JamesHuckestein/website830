@@ -100,5 +100,9 @@ def set_officer_position(member_number: str, title: str) -> dict | None:
     return update_item(TABLE, {"member_number": member_number}, {"officer_position": title})
 
 
+def set_auxiliary_officer(member_number: str, value: bool) -> dict | None:
+    return update_item(TABLE, {"member_number": member_number}, {"is_auxiliary_officer": value})
+
+
 def is_admin(member_number: str) -> bool:
     return member_number == ADMIN_MEMBER_NUMBER

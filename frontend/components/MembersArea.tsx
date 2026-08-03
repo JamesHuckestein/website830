@@ -28,6 +28,7 @@ const officerOnlyLinks: { id: MemberSubSection; label: string }[] = [
 
 const privilegedOfficerLinks: { id: MemberSubSection; label: string }[] = [
   { id: "updateOfficers", label: "Update Officers" },
+  { id: "auxOfficerPrivileges", label: "Auxiliary Officer Privileges" },
 ];
 
 const adminOnlyLinks: { id: MemberSubSection; label: string }[] = [

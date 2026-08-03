@@ -17,6 +17,7 @@ export type MemberResponse = {
   secondDegreeDate: string | null;
   thirdDegreeDate: string | null;
   fourthDegreeDate: string | null;
+  isAuxiliaryOfficer: boolean;
 };
 
 export type PrayerRequest = {
@@ -431,5 +432,17 @@ export async function changePassword(token: string, currentPassword: string, new
   return apiFetch<{ success: boolean; message: string }>("/members/change-password", token, {
     method: "PUT",
     body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export async function grantAuxiliaryOfficer(token: string, memberNumber: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/members/${memberNumber}/auxiliary-officer`, token, {
+    method: "POST",
+  });
+}
+
+export async function revokeAuxiliaryOfficer(token: string, memberNumber: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/members/${memberNumber}/auxiliary-officer`, token, {
+    method: "DELETE",
   });
 }

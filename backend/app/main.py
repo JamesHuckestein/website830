@@ -290,7 +290,7 @@ def _validate_cognito_token(token: str) -> dict:
     is_admin = member.get("is_admin", False)
     return {
         "sub": member_number,
-        "isOfficer": _is_officer(member.get("officer_position")) or is_admin,
+        "isOfficer": _is_officer(member.get("officer_position")) or is_admin or member.get("is_auxiliary_officer", False),
         "officerPosition": member.get("officer_position"),
         "isAdmin": is_admin,
     }
@@ -373,6 +373,7 @@ def _member_to_response(m: dict) -> dict:
         "secondDegreeDate": m.get("second_degree_date"),
         "thirdDegreeDate": m.get("third_degree_date"),
         "fourthDegreeDate": m.get("fourth_degree_date"),
+        "isAuxiliaryOfficer": m.get("is_auxiliary_officer", False),
     }
 
 
@@ -448,10 +449,11 @@ def login(body: LoginRequest):
     if member is None or member.get("passcode") != body.passcode:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     is_admin = member.get("is_admin", False)
+    is_officer = _is_officer(member.get("officer_position")) or is_admin or member.get("is_auxiliary_officer", False)
     token = jwt.encode(
         {
             "sub": member["member_number"],
-            "isOfficer": _is_officer(member.get("officer_position")) or is_admin,
+            "isOfficer": is_officer,
             "officerPosition": member.get("officer_position"),
             "isAdmin": is_admin,
         },
@@ -486,10 +488,11 @@ def _cognito_login(username: str, password: str) -> dict:
     member = members_repo.get_by_number(username)
     is_admin = member.get("is_admin", False) if member else False
     officer_position = member.get("officer_position") if member else None
+    is_aux = member.get("is_auxiliary_officer", False) if member else False
     return {
         "token": token,
         "memberNumber": username,
-        "isOfficer": _is_officer(officer_position) or is_admin,
+        "isOfficer": _is_officer(officer_position) or is_admin or is_aux,
         "officerPosition": officer_position,
         "isAdmin": is_admin,
     }
@@ -648,6 +651,32 @@ def delete_member(member_id: str, _payload: dict = Depends(_require_privileged_o
     if _COGNITO_USER_POOL_ID:
         _cognito_delete_user(member_id)
     return {"success": True, "message": "Member deleted successfully."}
+
+
+@app.post("/members/{member_id}/auxiliary-officer")
+def grant_auxiliary_officer(member_id: str, _payload: dict = Depends(_require_privileged_officer)):
+    member = members_repo.get_by_number(member_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found.")
+    if _is_admin_member(member):
+        raise HTTPException(status_code=409, detail="This member is already an officer and their privileges may not be altered here.")
+    if member.get("officer_position") in OFFICER_TITLES:
+        raise HTTPException(status_code=409, detail="This member is already an officer and their privileges may not be altered here.")
+    members_repo.set_auxiliary_officer(member_id, True)
+    name = f"{member.get('first_name', '')} {member.get('last_name', '')}".strip()
+    return {"success": True, "message": f"Officer privileges granted to {name}."}
+
+
+@app.delete("/members/{member_id}/auxiliary-officer")
+def revoke_auxiliary_officer(member_id: str, _payload: dict = Depends(_require_privileged_officer)):
+    member = members_repo.get_by_number(member_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found.")
+    if member.get("officer_position") in OFFICER_TITLES:
+        raise HTTPException(status_code=409, detail="This member is already an officer and their privileges may not be altered here.")
+    members_repo.set_auxiliary_officer(member_id, False)
+    name = f"{member.get('first_name', '')} {member.get('last_name', '')}".strip()
+    return {"success": True, "message": f"Officer privileges revoked from {name}."}
 
 
 @app.put("/admin/password")
