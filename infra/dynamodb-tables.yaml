@@ -1,0 +1,132 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: KoC Council 830 — DynamoDB tables
+
+Parameters:
+  TablePrefix:
+    Type: String
+    Default: koc830-dev-
+    Description: Prefix for all table names (e.g., koc830-dev-, koc830-prod-)
+
+Resources:
+
+  MembersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${TablePrefix}members"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: member_number
+          AttributeType: S
+        - AttributeName: officer_position
+          AttributeType: S
+      KeySchema:
+        - AttributeName: member_number
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: officer_position-index
+          KeySchema:
+            - AttributeName: officer_position
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  OfficersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${TablePrefix}officers"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: title
+          AttributeType: S
+      KeySchema:
+        - AttributeName: title
+          KeyType: HASH
+
+  EventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${TablePrefix}events"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: day
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: day-index
+          KeySchema:
+            - AttributeName: day
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  AnnouncementsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${TablePrefix}announcements"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  PhotosTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${TablePrefix}photos"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  PrayerRequestsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${TablePrefix}prayer-requests"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  MeetingMinutesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${TablePrefix}meeting-minutes"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+Outputs:
+  MembersTableName:
+    Value: !Ref MembersTable
+  OfficersTableName:
+    Value: !Ref OfficersTable
+  EventsTableName:
+    Value: !Ref EventsTable
+  AnnouncementsTableName:
+    Value: !Ref AnnouncementsTable
+  PhotosTableName:
+    Value: !Ref PhotosTable
+  PrayerRequestsTableName:
+    Value: !Ref PrayerRequestsTable
+  MeetingMinutesTableName:
+    Value: !Ref MeetingMinutesTable

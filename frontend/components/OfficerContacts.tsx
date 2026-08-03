@@ -51,7 +51,15 @@ export function OfficerContacts({ token, onBack }: OfficerContactsProps) {
       {modal && <SubmitModal success={modal.success} message={modal.message} onDismiss={handleDismiss} />}
       {composingFor && officer ? (
         <section className="space-y-4">
-          <h2 className="text-2xl font-semibold text-[#032147]">Email {officer.name}</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold text-[#032147]">Email {officer.name}</h2>
+            <button
+              onClick={onBack}
+              className="rounded-md border border-[#888888] px-3 py-1 text-sm font-semibold text-[#032147]"
+            >
+              Back
+            </button>
+          </div>
           <p className="text-sm text-[#888888]">{officer.title}</p>
           <form onSubmit={handleSend} className="max-w-md space-y-3">
             <label className="block text-sm font-medium text-[#032147]">
@@ -72,13 +80,18 @@ export function OfficerContacts({ token, onBack }: OfficerContactsProps) {
               </button>
             </div>
           </form>
-          <button type="button" onClick={onBack} className="text-sm text-[#4169E1] underline">
-            Back to Members Area
-          </button>
         </section>
       ) : (
         <section className="space-y-4">
-          <h2 className="text-2xl font-semibold text-[#032147]">Officers</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold text-[#032147]">Officers</h2>
+            <button
+              onClick={onBack}
+              className="rounded-md border border-[#888888] px-3 py-1 text-sm font-semibold text-[#032147]"
+            >
+              Back
+            </button>
+          </div>
           {officerList === null ? (
             <p className="text-sm text-[#888888]">Loading officers...</p>
           ) : (
@@ -111,9 +124,6 @@ export function OfficerContacts({ token, onBack }: OfficerContactsProps) {
               ))}
             </ul>
           )}
-          <button type="button" onClick={onBack} className="text-sm text-[#4169E1] underline">
-            Back to Members Area
-          </button>
         </section>
       )}
     </>

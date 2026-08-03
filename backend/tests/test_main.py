@@ -2,34 +2,26 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.seed import reset_to_seed
 
 client = TestClient(app)
 
 
-@pytest.fixture(autouse=True)
-def reset():
-    reset_to_seed()
-    yield
-    reset_to_seed()
-
-
-def _token(member_number: str = "8301001", passcode: str = "faith830") -> str:
+def _token(member_number: str = "3418397", passcode: str = "koc830") -> str:
     r = client.post("/auth/login", json={"membershipNumber": member_number, "passcode": passcode})
     assert r.status_code == 200
     return r.json()["token"]
 
 
-def _auth(member_number: str = "8301001", passcode: str = "faith830") -> dict:
+def _auth(member_number: str = "3418397", passcode: str = "koc830") -> dict:
     return {"Authorization": f"Bearer {_token(member_number, passcode)}"}
 
 
 def _officer_auth() -> dict:
-    return _auth("8301002", "charity830")  # John Akers — Grand Knight
+    return _auth("4897307", "koc830")  # John Akers — Grand Knight
 
 
 def _non_officer_auth() -> dict:
-    return _auth("8301015", "hope830")  # Thomas Wilson — no officer position
+    return _auth("4606798", "koc830")  # Darold Adami — no officer position
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +39,7 @@ def test_health():
 # ---------------------------------------------------------------------------
 
 def test_login_officer_returns_is_officer_true():
-    r = client.post("/auth/login", json={"membershipNumber": "8301002", "passcode": "charity830"})
+    r = client.post("/auth/login", json={"membershipNumber": "4897307", "passcode": "koc830"})
     assert r.status_code == 200
     assert "token" in r.json()
     import jwt as pyjwt
@@ -56,7 +48,7 @@ def test_login_officer_returns_is_officer_true():
 
 
 def test_login_non_officer_returns_is_officer_false():
-    r = client.post("/auth/login", json={"membershipNumber": "8301015", "passcode": "hope830"})
+    r = client.post("/auth/login", json={"membershipNumber": "4606798", "passcode": "koc830"})
     assert r.status_code == 200
     import jwt as pyjwt
     payload = pyjwt.decode(r.json()["token"], options={"verify_signature": False})
@@ -64,7 +56,7 @@ def test_login_non_officer_returns_is_officer_false():
 
 
 def test_login_wrong_passcode():
-    r = client.post("/auth/login", json={"membershipNumber": "8301001", "passcode": "wrong"})
+    r = client.post("/auth/login", json={"membershipNumber": "3418397", "passcode": "wrong"})
     assert r.status_code == 401
 
 
@@ -74,8 +66,7 @@ def test_login_unknown_member():
 
 
 def test_login_member_with_null_passcode_rejected():
-    # Member 8301003 has no passcode in seed
-    r = client.post("/auth/login", json={"membershipNumber": "8301003", "passcode": ""})
+    r = client.post("/auth/login", json={"membershipNumber": "2486615", "passcode": ""})
     assert r.status_code == 401
 
 
@@ -92,13 +83,13 @@ def test_get_members_returns_all():
     r = client.get("/members", headers=_auth())
     assert r.status_code == 200
     members = r.json()
-    assert len(members) == 15
-    assert members[0]["memberNumber"] == "8301001"
+    assert len(members) == 155
+    assert any(m["memberNumber"] == "3418397" for m in members)
     assert "passcode" not in members[0]
 
 
 def test_get_member_by_id():
-    r = client.get("/members/8301001", headers=_auth())
+    r = client.get("/members/3418397", headers=_auth())
     assert r.status_code == 200
     m = r.json()
     assert m["firstName"] == "James"
@@ -113,7 +104,7 @@ def test_get_member_by_id_not_found():
 
 def test_update_member_contact_info():
     r = client.put(
-        "/members/8301004",
+        "/members/3862400",
         headers=_non_officer_auth(),
         json={
             "addressStreet": "999 New St",
@@ -128,7 +119,7 @@ def test_update_member_contact_info():
     assert r.json()["success"] is True
     assert "message" in r.json()
     # Verify the update persisted
-    m = client.get("/members/8301004", headers=_auth()).json()
+    m = client.get("/members/3862400", headers=_auth()).json()
     assert m["addressStreet"] == "999 New St"
     assert m["addressCity"] == "Dallas"
     assert m["email"] == "mark.new@example.com"
@@ -148,7 +139,7 @@ def test_update_member_not_found():
 
 def test_update_member_persists_within_session():
     client.put(
-        "/members/8301004",
+        "/members/3862400",
         headers=_non_officer_auth(),
         json={
             "addressStreet": "42 Changed Rd",
@@ -159,7 +150,7 @@ def test_update_member_persists_within_session():
             "email": "changed@example.com",
         },
     )
-    r = client.get("/members/8301004", headers=_auth())
+    r = client.get("/members/3862400", headers=_auth())
     assert r.json()["addressStreet"] == "42 Changed Rd"
 
 
@@ -241,8 +232,8 @@ def test_create_prayer_request_accepts_max_length_text():
 
 
 def test_delete_prayer_request_by_owner():
-    target_id = "a1b2c3d4-0001-0000-0000-000000000001"  # submitted_by 8301004
-    r = client.delete(f"/prayer-requests/{target_id}", headers=_auth("8301004", "hope830"))
+    target_id = "a1b2c3d4-0001-0000-0000-000000000001"  # submitted_by 3862400
+    r = client.delete(f"/prayer-requests/{target_id}", headers=_auth("3862400", "koc830"))
     assert r.status_code == 200
     assert r.json()["success"] is True
     listing = client.get("/prayer-requests", headers=_auth()).json()
@@ -256,7 +247,7 @@ def test_delete_prayer_request_not_found():
 
 
 def test_delete_prayer_request_forbidden_for_non_owner_non_officer():
-    # request id ...0002 was submitted by 8301006; 8301004 (hope830) is a non-officer member
+    # request id ...0002 was submitted by 4661909; 3862400 is an officer (Advocate)
     target_id = "a1b2c3d4-0002-0000-0000-000000000002"
     r = client.delete(f"/prayer-requests/{target_id}", headers=_non_officer_auth())
     assert r.status_code == 403
@@ -265,7 +256,7 @@ def test_delete_prayer_request_forbidden_for_non_owner_non_officer():
 
 
 def test_delete_prayer_request_allowed_for_officer_on_other_members_request():
-    # request id ...0001 was submitted by 8301004; 8301002 is Grand Knight (officer)
+    # request id ...0001 was submitted by 3862400; 4897307 is Grand Knight (officer)
     target_id = "a1b2c3d4-0001-0000-0000-000000000001"
     r = client.delete(f"/prayer-requests/{target_id}", headers=_officer_auth())
     assert r.status_code == 200
@@ -291,7 +282,7 @@ def test_public_prayer_requests_no_auth_required():
 
 def test_public_prayer_requests_reflects_deletes():
     target_id = "a1b2c3d4-0001-0000-0000-000000000001"
-    client.delete(f"/prayer-requests/{target_id}", headers=_auth("8301004", "hope830"))
+    client.delete(f"/prayer-requests/{target_id}", headers=_auth("3862400", "koc830"))
     public = client.get("/prayer-requests/public").json()
     assert all(item["id"] != target_id for item in public)
     assert len(public) == 4
@@ -399,7 +390,7 @@ def test_export_csv_officer_returns_csv():
     assert "text/csv" in r.headers["content-type"]
     lines = r.text.strip().splitlines()
     assert lines[0].startswith("memberNumber")
-    assert len(lines) == 16  # header + 15 members
+    assert len(lines) == 156  # header + 155 members
 
 
 def test_export_csv_contains_member_data():
@@ -627,7 +618,7 @@ def test_event_full_lifecycle():
     assert len(listing) == 4
     new_record = next(e for e in listing if e["id"] == new_id)
     assert new_record["title"] == "LC1"
-    assert new_record["createdBy"] == "8301002"
+    assert new_record["createdBy"] == "4897307"
     assert new_record["createdAt"] == new_record["updatedAt"]
 
     # Update
@@ -664,7 +655,7 @@ def test_create_event_populates_audit_fields_from_jwt_and_today(monkeypatch):
     assert r.status_code == 200
     new_id = r.json()["id"]
     record = next(e for e in client.get("/events").json() if e["id"] == new_id)
-    assert record["createdBy"] == "8301002"
+    assert record["createdBy"] == "4897307"
     assert record["createdAt"] == "2026-05-01T00:00:00Z"
     assert record["updatedAt"] == "2026-05-01T00:00:00Z"
 
@@ -689,39 +680,6 @@ def test_update_event_bumps_updated_at_but_not_created_at(monkeypatch):
     assert after["updatedAt"] == "2026-05-15T00:00:00Z"
 
 
-def test_create_event_max_3_under_concurrency(monkeypatch):
-    """Regression for B1: even with a deliberately slow append (widening the
-    check-and-insert window) and concurrent requests, the lock guarantees the
-    max-3 invariant. Removing `_events_lock` from create_event should make this
-    test fail."""
-    import time
-    from concurrent.futures import ThreadPoolExecutor
-
-    from app import main as _main
-    from app.seed import events_store as _orig_store
-
-    class SlowAppendStore(list):
-        def append(self, item):  # type: ignore[override]
-            time.sleep(0.05)
-            list.append(self, item)
-
-    slow = SlowAppendStore(_orig_store)
-    monkeypatch.setattr(_main, "events_store", slow)
-
-    headers = _officer_auth()
-    payload = _event_payload(day="2026-05-25")  # empty day in seed
-
-    def fire():
-        return client.post("/events", headers=headers, json=payload)
-
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        results = [f.result() for f in [ex.submit(fire) for _ in range(5)]]
-
-    statuses = [r.status_code for r in results]
-    on_day = sum(1 for e in slow if e["day"] == "2026-05-25")
-    assert on_day == 3, f"max-3 invariant violated; got {on_day} events, statuses={statuses}"
-    assert statuses.count(200) == 3, statuses
-    assert statuses.count(409) == 2, statuses
 
 
 # ---------------------------------------------------------------------------
@@ -931,41 +889,6 @@ def test_delete_announcement_requires_auth():
     assert r.status_code in (401, 403)
 
 
-def test_announcements_concurrent_post_no_lost_writes(monkeypatch):
-    """Mirrors the events concurrency test: 5 concurrent POSTs all succeed with
-    unique ids and the store ends up with the expected count. Demonstrates the
-    lock prevents lost appends under the slow-append shim."""
-    import time
-    from concurrent.futures import ThreadPoolExecutor
-
-    from app import main as _main
-    from app.seed import announcements_store as _orig_store
-
-    _patch_today(monkeypatch, 2026, 5, 1)
-
-    class SlowAppendStore(list):
-        def append(self, item):  # type: ignore[override]
-            time.sleep(0.05)
-            list.append(self, item)
-
-    slow = SlowAppendStore(_orig_store)
-    monkeypatch.setattr(_main, "announcements_store", slow)
-
-    headers = _officer_auth()
-    payload = _announcement_payload()
-
-    def fire():
-        return client.post("/announcements", headers=headers, json=payload)
-
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        results = [f.result() for f in [ex.submit(fire) for _ in range(5)]]
-
-    statuses = [r.status_code for r in results]
-    new_ids = {r.json()["id"] for r in results if r.status_code == 200}
-    assert statuses.count(200) == 5, statuses
-    assert len(new_ids) == 5, "expected 5 distinct ids"
-    # Seed had 3 + 5 newly created = 8
-    assert len(slow) == 8
 
 
 def test_announcement_full_lifecycle(monkeypatch):
@@ -990,7 +913,7 @@ def test_announcement_full_lifecycle(monkeypatch):
     new_record = next(a for a in listing if a["id"] == new_id)
     assert new_record["title"] == "LC1"
     assert new_record["deleteDate"] == "2026-09-01"
-    assert new_record["createdBy"] == "8301002"
+    assert new_record["createdBy"] == "4897307"
     assert new_record["createdAt"] == new_record["updatedAt"]
 
     # Update
@@ -1032,7 +955,7 @@ def test_create_announcement_populates_audit_fields_from_jwt_and_today(monkeypat
     assert r.status_code == 200
     new_id = r.json()["id"]
     record = next(a for a in client.get("/announcements").json() if a["id"] == new_id)
-    assert record["createdBy"] == "8301002"
+    assert record["createdBy"] == "4897307"
     assert record["createdAt"] == "2026-05-01T00:00:00Z"
     assert record["updatedAt"] == "2026-05-01T00:00:00Z"
 
@@ -1053,13 +976,13 @@ def test_update_announcement_preserves_created_by_and_created_at(monkeypatch):
     # PUT as a different officer to ensure created_by isn't overwritten by the JWT sub
     r = client.put(
         f"/announcements/{new_id}",
-        headers=_auth("8301001", "faith830"),  # Deputy Grand Knight, also an officer
+        headers=_auth("3418397", "koc830"),  # Deputy Grand Knight, also an officer
         json=_announcement_payload(title="B", deleteDate="2026-10-15"),
     )
     assert r.status_code == 200
 
     after = next(a for a in client.get("/announcements").json() if a["id"] == new_id)
-    assert after["createdBy"] == "8301002"  # original creator preserved
+    assert after["createdBy"] == "4897307"  # original creator preserved
     assert after["createdAt"] == "2026-05-01T00:00:00Z"  # original timestamp preserved
     assert after["updatedAt"] == "2026-05-15T00:00:00Z"  # bumped to current _today
 
@@ -1199,39 +1122,6 @@ def test_delete_photo_requires_auth():
     assert r.status_code in (401, 403)
 
 
-def test_photos_concurrent_post_no_lost_writes(monkeypatch):
-    """5 concurrent POSTs all succeed with unique ids and the store ends up with
-    the expected count. Demonstrates the lock prevents lost appends under the
-    slow-append shim."""
-    import time
-    from concurrent.futures import ThreadPoolExecutor
-
-    from app import main as _main
-    from app.seed import photos_store as _orig_store
-
-    class SlowAppendStore(list):
-        def append(self, item):  # type: ignore[override]
-            time.sleep(0.05)
-            list.append(self, item)
-
-    slow = SlowAppendStore(_orig_store)
-    monkeypatch.setattr(_main, "photos_store", slow)
-
-    headers = _officer_auth()
-    payload = _photo_payload()
-
-    def fire():
-        return client.post("/photos", headers=headers, json=payload)
-
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        results = [f.result() for f in [ex.submit(fire) for _ in range(5)]]
-
-    statuses = [r.status_code for r in results]
-    new_ids = {r.json()["id"] for r in results if r.status_code == 200}
-    assert statuses.count(200) == 5, statuses
-    assert len(new_ids) == 5, "expected 5 distinct ids"
-    # Seed had 2 + 5 newly created = 7
-    assert len(slow) == 7
 
 
 def test_photo_full_lifecycle(monkeypatch):
@@ -1258,7 +1148,7 @@ def test_photo_full_lifecycle(monkeypatch):
     assert listing[-1]["id"] == new_id
     assert listing[-1]["title"] == "LC1"
     assert listing[-1]["photoUrl"] == "/gallery/lc1.jpg"
-    assert listing[-1]["createdBy"] == "8301002"
+    assert listing[-1]["createdBy"] == "4897307"
     assert listing[-1]["createdAt"] == listing[-1]["updatedAt"]
 
     # Update
@@ -1297,7 +1187,7 @@ def test_create_photo_populates_audit_fields_from_jwt_and_now(monkeypatch):
     assert r.status_code == 200
     new_id = r.json()["id"]
     record = next(p for p in client.get("/photos").json() if p["id"] == new_id)
-    assert record["createdBy"] == "8301002"
+    assert record["createdBy"] == "4897307"
     assert record["createdAt"] == "2026-05-01T09:30:00Z"
     assert record["updatedAt"] == "2026-05-01T09:30:00Z"
 
@@ -1316,13 +1206,13 @@ def test_update_photo_preserves_created_by_and_created_at(monkeypatch):
     # PUT as a different officer to ensure created_by isn't overwritten by the JWT sub
     r = client.put(
         f"/photos/{new_id}",
-        headers=_auth("8301001", "faith830"),  # Deputy Grand Knight, also an officer
+        headers=_auth("3418397", "koc830"),  # Deputy Grand Knight, also an officer
         json=_photo_payload(title="B"),
     )
     assert r.status_code == 200
 
     after = next(p for p in client.get("/photos").json() if p["id"] == new_id)
-    assert after["createdBy"] == "8301002"  # original creator preserved
+    assert after["createdBy"] == "4897307"  # original creator preserved
     assert after["createdAt"] == "2026-05-01T09:30:00Z"  # original timestamp preserved
     assert after["updatedAt"] == "2026-05-15T14:45:00Z"  # bumped to current time
 

@@ -8,9 +8,13 @@ import { TopBanner } from "@/components/TopBanner";
 import { navItems, type MemberSubSection, type SectionId } from "@/data/siteData";
 import { loginMember } from "@/lib/api";
 
-function decodeJwtPayload(token: string): { sub: string; isOfficer: boolean; officerPosition: string | null; isAdmin: boolean } {
-  const payload = token.split(".")[1];
-  return JSON.parse(atob(payload)) as { sub: string; isOfficer: boolean; officerPosition: string | null; isAdmin: boolean };
+function decodeJwtPayload(token: string): { sub: string; isOfficer?: boolean; officerPosition?: string | null; isAdmin?: boolean } {
+  try {
+    const payload = token.split(".")[1];
+    return JSON.parse(atob(payload));
+  } catch {
+    return { sub: "" };
+  }
 }
 
 export function AppShell() {
@@ -26,14 +30,21 @@ export function AppShell() {
 
   const handleLogin = async (membershipNumber: string, passcode: string): Promise<boolean> => {
     try {
-      const { token: jwt } = await loginMember(membershipNumber, passcode);
-      const { sub, isOfficer: officerFlag, officerPosition: position, isAdmin: adminFlag } = decodeJwtPayload(jwt);
-      setToken(jwt);
-      setMemberNumber(sub);
+      const resp = await loginMember(membershipNumber, passcode);
+      setToken(resp.token);
+      if (resp.memberNumber !== undefined) {
+        setMemberNumber(resp.memberNumber);
+        setIsOfficer(resp.isOfficer ?? false);
+        setIsAdmin(resp.isAdmin ?? false);
+        setOfficerPosition(resp.officerPosition ?? null);
+      } else {
+        const decoded = decodeJwtPayload(resp.token);
+        setMemberNumber(decoded.sub);
+        setIsOfficer(decoded.isOfficer ?? false);
+        setIsAdmin(decoded.isAdmin ?? false);
+        setOfficerPosition(decoded.officerPosition ?? null);
+      }
       setIsLoggedIn(true);
-      setIsOfficer(officerFlag);
-      setIsAdmin(adminFlag ?? false);
-      setOfficerPosition(position);
       return true;
     } catch {
       return false;

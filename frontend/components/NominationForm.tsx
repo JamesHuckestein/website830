@@ -37,7 +37,15 @@ export function NominationForm({ token, onBack }: NominationFormProps) {
     <>
       {modal && <SubmitModal success={modal.success} message={modal.message} onDismiss={handleDismiss} />}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-[#032147]">Knight and Family of the Month</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-semibold text-[#032147]">Knight and Family of the Month</h2>
+          <button
+            onClick={onBack}
+            className="rounded-md border border-[#888888] px-3 py-1 text-sm font-semibold text-[#032147]"
+          >
+            Back
+          </button>
+        </div>
         <p className="text-sm text-[#888888]">
           Nominate a fellow knight and family to be recognized this month.
         </p>
@@ -67,9 +75,6 @@ export function NominationForm({ token, onBack }: NominationFormProps) {
             Send
           </button>
         </form>
-        <button type="button" onClick={onBack} className="text-sm text-[#4169E1] underline">
-          Back to Members Area
-        </button>
       </section>
     </>
   );

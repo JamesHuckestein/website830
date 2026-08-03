@@ -95,7 +95,15 @@ export function PrayerRequests({ token, memberNumber, isOfficer, onBack }: Praye
         />
       )}
       <section className="space-y-6">
-        <h2 className="text-2xl font-semibold text-[#032147]">Prayer Requests</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-semibold text-[#032147]">Prayer Requests</h2>
+          <button
+            onClick={onBack}
+            className="rounded-md border border-[#888888] px-3 py-1 text-sm font-semibold text-[#032147]"
+          >
+            Back
+          </button>
+        </div>
         <form onSubmit={handleSubmit} className="max-w-md space-y-3">
           <label className="block text-sm font-medium text-[#032147]">
             Submit a Prayer Request
@@ -160,9 +168,6 @@ export function PrayerRequests({ token, memberNumber, isOfficer, onBack }: Praye
             })}
           </ul>
         </div>
-        <button type="button" onClick={onBack} className="text-sm text-[#4169E1] underline">
-          Back to Members Area
-        </button>
       </section>
     </>
   );

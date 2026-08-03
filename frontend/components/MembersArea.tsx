@@ -10,6 +10,7 @@ type MembersAreaProps = {
 
 const baseLinks: { id: MemberSubSection; label: string }[] = [
   { id: "contactInfo",     label: "Contact Information" },
+  { id: "changePassword",  label: "Change Password" },
   { id: "birthdays",       label: "Birthdays" },
   { id: "prayerRequests",  label: "Prayer Requests" },
   { id: "memberList",      label: "Member List" },
@@ -22,6 +23,7 @@ const officerOnlyLinks: { id: MemberSubSection; label: string }[] = [
   { id: "calendarUpdates",     label: "Calendar Updates" },
   { id: "announcementsUpdate", label: "Edit Announcements" },
   { id: "editPhotoGallery",    label: "Edit Photo Gallery" },
+  { id: "editMeetingMinutes",  label: "Edit Meeting Minutes" },
 ];
 
 const privilegedOfficerLinks: { id: MemberSubSection; label: string }[] = [

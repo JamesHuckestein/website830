@@ -3,37 +3,35 @@ import csv
 import io
 import logging
 import os
-import threading
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
 import httpx
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 
-from app.seed import (
-    ADMIN_MEMBER_NUMBER,
-    OFFICER_TITLES_ORDERED,
-    announcements_store,
-    events_store,
-    meeting_minutes_store,
-    members_store,
-    officers_store,
-    photos_store,
-    prayer_requests_store,
-)
+from app.repos import announcements as announcements_repo
+from app.repos import events as events_repo
+from app.repos import meeting_minutes as meeting_minutes_repo
+from app.repos import members as members_repo
+from app.repos import officers as officers_repo
+from app.repos import photos as photos_repo
+from app.repos import prayer_requests as prayer_requests_repo
+from app.seed import ADMIN_MEMBER_NUMBER
+
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="KoC Council 830 API")
 
+_CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -41,6 +39,9 @@ app.add_middleware(
 _JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-in-production!!")
 _JWT_ALGORITHM = "HS256"
 _EMAIL_GATEWAY_URL = os.getenv("EMAIL_GATEWAY_URL")
+_COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID")
+_COGNITO_APP_CLIENT_ID = os.getenv("COGNITO_APP_CLIENT_ID")
+_COGNITO_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 OFFICER_TITLES = {
     "Grand Knight", "Deputy Grand Knight", "Chancellor", "Advocate",
@@ -198,7 +199,7 @@ class OfficerUpdateRequest(BaseModel):
 
 
 class _MemberBody(BaseModel):
-    memberNumber: str = Field(pattern=r"^830\d{4}$")
+    memberNumber: str = Field(pattern=r"^\d{6,9}$")
     firstName: str = Field(min_length=1)
     lastName: str = Field(min_length=1)
     addressStreet: str = Field(min_length=1)
@@ -243,6 +244,11 @@ class UpdateMemberFullRequest(_MemberBody):
     passcode: str | None = None
 
 
+class ChangePasswordRequest(BaseModel):
+    currentPassword: str = Field(min_length=1)
+    newPassword: str = Field(min_length=8)
+
+
 class AdminPasswordUpdateRequest(BaseModel):
     passcode: str = Field(min_length=1)
 
@@ -251,9 +257,51 @@ class AdminPasswordUpdateRequest(BaseModel):
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-def _require_auth(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> dict:
+_cognito_jwks: dict | None = None
+
+
+def _get_cognito_jwks() -> dict:
+    global _cognito_jwks
+    if _cognito_jwks is None:
+        import urllib.request
+        jwks_url = f"https://cognito-idp.{_COGNITO_REGION}.amazonaws.com/{_COGNITO_USER_POOL_ID}/.well-known/jwks.json"
+        with urllib.request.urlopen(jwks_url) as resp:
+            _cognito_jwks = __import__("json").loads(resp.read())
+    return _cognito_jwks
+
+
+def _validate_cognito_token(token: str) -> dict:
+    from jose import jwt as jose_jwt, JWTError
+    jwks = _get_cognito_jwks()
     try:
-        return jwt.decode(credentials.credentials, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
+        payload = jose_jwt.decode(
+            token,
+            jwks,
+            algorithms=["RS256"],
+            issuer=f"https://cognito-idp.{_COGNITO_REGION}.amazonaws.com/{_COGNITO_USER_POOL_ID}",
+            options={"verify_aud": False},
+        )
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    member_number = payload.get("username") or payload.get("sub")
+    member = members_repo.get_by_number(member_number)
+    if member is None:
+        raise HTTPException(status_code=401, detail="Member not found")
+    is_admin = member.get("is_admin", False)
+    return {
+        "sub": member_number,
+        "isOfficer": _is_officer(member.get("officer_position")) or is_admin,
+        "officerPosition": member.get("officer_position"),
+        "isAdmin": is_admin,
+    }
+
+
+def _require_auth(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> dict:
+    token = credentials.credentials
+    if _COGNITO_USER_POOL_ID:
+        return _validate_cognito_token(token)
+    try:
+        return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -303,28 +351,6 @@ def _now_iso_precise() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-# Serializes read-modify-write sequences against `events_store`. Sync routes run
-# in FastAPI's threadpool, so two concurrent POSTs targeting the same day could
-# otherwise each see "2 events" before either appends, producing 4. Required
-# while the store is in-memory; the production SQL migration should rely on a
-# transaction (or BEFORE-INSERT trigger) for the same invariant.
-_events_lock = threading.Lock()
-
-# Same protection for the announcements store. There is no count cap to enforce,
-# but the lock still guards PUT (lookup→modify) and DELETE (enumerate→pop)
-# against concurrent mutation that could lose updates or pop the wrong index.
-_announcements_lock = threading.Lock()
-
-# Same protection for the photos store.
-_photos_lock = threading.Lock()
-
-# Same protection for the officers store.
-_officers_lock = threading.Lock()
-
-# Same protection for the members store.
-_members_lock = threading.Lock()
-
-
 # ---------------------------------------------------------------------------
 # Data helpers
 # ---------------------------------------------------------------------------
@@ -332,16 +358,16 @@ _members_lock = threading.Lock()
 def _member_to_response(m: dict) -> dict:
     return {
         "memberNumber": m["member_number"],
-        "firstName": m["first_name"],
-        "lastName": m["last_name"],
-        "addressStreet": m["address_street"],
-        "addressCity": m["address_city"],
-        "addressState": m["address_state"],
-        "addressZip": m["address_zip"],
-        "phone": m["phone"],
-        "birthday": m["birthday"],
+        "firstName": m.get("first_name", ""),
+        "lastName": m.get("last_name", ""),
+        "addressStreet": m.get("address_street"),
+        "addressCity": m.get("address_city"),
+        "addressState": m.get("address_state"),
+        "addressZip": m.get("address_zip"),
+        "phone": m.get("phone", ""),
+        "birthday": m.get("birthday"),
         "officerPosition": m.get("officer_position"),
-        "email": m["email"],
+        "email": m.get("email", ""),
         "assemblyNumber": m.get("assembly_number"),
         "firstDegreeDate": m.get("first_degree_date"),
         "secondDegreeDate": m.get("second_degree_date"),
@@ -403,23 +429,6 @@ def _send_email(to: str | list[str], subject: str, body: str) -> None:
     httpx.post(_EMAIL_GATEWAY_URL, json={"to": to, "subject": subject, "body": body}, timeout=10)
 
 
-def _upcoming_birthdays(days: int = 30) -> list[dict]:
-    today = date.today()
-    cutoff = today + timedelta(days=days)
-    result = []
-    for m in members_store:
-        if not m.get("birthday"):
-            continue
-        bday = date.fromisoformat(m["birthday"])
-        for year in (today.year, today.year + 1):
-            try:
-                candidate = bday.replace(year=year)
-            except ValueError:
-                candidate = bday.replace(year=year, day=28)
-            if today <= candidate <= cutoff:
-                result.append(m)
-                break
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +442,9 @@ def health():
 
 @app.post("/auth/login")
 def login(body: LoginRequest):
-    member = next((m for m in members_store if m["member_number"] == body.membershipNumber), None)
+    if _COGNITO_USER_POOL_ID:
+        return _cognito_login(body.membershipNumber, body.passcode)
+    member = members_repo.get_by_number(body.membershipNumber)
     if member is None or member.get("passcode") != body.passcode:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     is_admin = member.get("is_admin", False)
@@ -450,9 +461,43 @@ def login(body: LoginRequest):
     return {"token": token}
 
 
+def _cognito_login(username: str, password: str) -> dict:
+    import boto3
+    client = boto3.client("cognito-idp", region_name=_COGNITO_REGION)
+    try:
+        resp = client.initiate_auth(
+            ClientId=_COGNITO_APP_CLIENT_ID,
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={"USERNAME": username, "PASSWORD": password},
+        )
+    except client.exceptions.NotAuthorizedException:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    except client.exceptions.UserNotFoundException:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    except client.exceptions.UserNotConfirmedException:
+        raise HTTPException(status_code=401, detail="Account not confirmed")
+    result = resp.get("AuthenticationResult", {})
+    token = result.get("AccessToken") or result.get("IdToken")
+    if not token:
+        challenge = resp.get("ChallengeName")
+        if challenge == "NEW_PASSWORD_REQUIRED":
+            raise HTTPException(status_code=401, detail="Password change required")
+        raise HTTPException(status_code=401, detail="Authentication failed")
+    member = members_repo.get_by_number(username)
+    is_admin = member.get("is_admin", False) if member else False
+    officer_position = member.get("officer_position") if member else None
+    return {
+        "token": token,
+        "memberNumber": username,
+        "isOfficer": _is_officer(officer_position) or is_admin,
+        "officerPosition": officer_position,
+        "isAdmin": is_admin,
+    }
+
+
 @app.get("/members/birthdays")
 def get_birthdays(_payload: dict = Depends(_require_auth)):
-    return [_member_to_response(m) for m in _upcoming_birthdays() if not _is_admin_member(m)]
+    return [_member_to_response(m) for m in members_repo.get_birthdays()]
 
 
 @app.get("/members/export-csv")
@@ -466,9 +511,8 @@ def export_members_csv(_payload: dict = Depends(_require_officer)):
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
     writer.writeheader()
-    for m in members_store:
-        if not _is_admin_member(m):
-            writer.writerow(_member_to_response(m))
+    for m in members_repo.list_all():
+        writer.writerow(_member_to_response(m))
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
@@ -479,12 +523,12 @@ def export_members_csv(_payload: dict = Depends(_require_officer)):
 
 @app.get("/members")
 def get_members(_payload: dict = Depends(_require_auth)):
-    return [_member_to_response(m) for m in members_store if not _is_admin_member(m)]
+    return [_member_to_response(m) for m in members_repo.list_all()]
 
 
 @app.get("/members/{member_id}")
 def get_member(member_id: str, _payload: dict = Depends(_require_auth)):
-    member = next((m for m in members_store if m["member_number"] == member_id), None)
+    member = members_repo.get_by_number(member_id)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
     if _is_admin_member(member) and not _payload.get("isAdmin"):
@@ -492,99 +536,117 @@ def get_member(member_id: str, _payload: dict = Depends(_require_auth)):
     return _member_to_response(member)
 
 
+@app.put("/members/change-password")
+def change_password(body: ChangePasswordRequest, payload: dict = Depends(_require_auth)):
+    member_number = payload["sub"]
+    if _COGNITO_USER_POOL_ID:
+        _cognito_change_password(member_number, body.currentPassword, body.newPassword)
+    else:
+        member = members_repo.get_by_number(member_number)
+        if member is None or member.get("passcode") != body.currentPassword:
+            raise HTTPException(status_code=401, detail="Current password is incorrect.")
+        members_repo.update_passcode(member_number, body.newPassword)
+    return {"success": True, "message": "Password changed successfully."}
+
+
 @app.put("/members/{member_id}")
 def update_member(member_id: str, body: UpdateContactRequest, _payload: dict = Depends(_require_auth)):
-    member = next((m for m in members_store if m["member_number"] == member_id), None)
+    member = members_repo.get_by_number(member_id)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
     if _is_admin_member(member) and not _payload.get("isAdmin"):
         raise HTTPException(status_code=403, detail="Cannot modify admin account.")
-    member["address_street"] = body.addressStreet
-    member["address_city"] = body.addressCity
-    member["address_state"] = body.addressState
-    member["address_zip"] = body.addressZip
-    member["phone"] = body.phone
-    member["email"] = body.email
+    members_repo.update_contact(member_id, {
+        "address_street": body.addressStreet,
+        "address_city": body.addressCity,
+        "address_state": body.addressState,
+        "address_zip": body.addressZip,
+        "phone": body.phone,
+        "email": body.email,
+    })
     return {"success": True, "message": "Contact information updated."}
 
 
 @app.post("/members", status_code=201)
 def create_member(body: CreateMemberRequest, _payload: dict = Depends(_require_privileged_officer)):
-    with _members_lock:
-        existing = next((m for m in members_store if m["member_number"] == body.memberNumber), None)
-        if existing is not None:
-            raise HTTPException(status_code=409, detail="A member with that number already exists.")
-        members_store.append({
-            "member_number": body.memberNumber,
-            "passcode": body.passcode,
-            "first_name": body.firstName,
-            "last_name": body.lastName,
-            "address_street": body.addressStreet,
-            "address_city": body.addressCity,
-            "address_state": body.addressState,
-            "address_zip": body.addressZip,
-            "phone": body.phone,
-            "birthday": body.birthday,
-            "email": body.email,
-            "officer_position": None,
-            "assembly_number": body.assemblyNumber,
-            "first_degree_date": body.firstDegreeDate,
-            "second_degree_date": body.secondDegreeDate,
-            "third_degree_date": body.thirdDegreeDate,
-            "fourth_degree_date": body.fourthDegreeDate,
-        })
+    item = {
+        "member_number": body.memberNumber,
+        "passcode": body.passcode,
+        "first_name": body.firstName,
+        "last_name": body.lastName,
+        "address_street": body.addressStreet,
+        "address_city": body.addressCity,
+        "address_state": body.addressState,
+        "address_zip": body.addressZip,
+        "phone": body.phone,
+        "birthday": body.birthday,
+        "email": body.email,
+        "assembly_number": body.assemblyNumber,
+        "first_degree_date": body.firstDegreeDate,
+        "second_degree_date": body.secondDegreeDate,
+        "third_degree_date": body.thirdDegreeDate,
+        "fourth_degree_date": body.fourthDegreeDate,
+    }
+    if not members_repo.create(item):
+        raise HTTPException(status_code=409, detail="A member with that number already exists.")
+    if _COGNITO_USER_POOL_ID:
+        _cognito_create_user(body.memberNumber, body.passcode, body.email)
     return {"success": True, "message": "Member added successfully."}
 
 
 @app.put("/members/{member_id}/full")
 def update_member_full(member_id: str, body: UpdateMemberFullRequest, _payload: dict = Depends(_require_privileged_officer)):
-    with _members_lock:
-        member = next((m for m in members_store if m["member_number"] == member_id), None)
-        if member is None:
-            raise HTTPException(status_code=404, detail="Member not found")
-        if _is_admin_member(member) and not _payload.get("isAdmin"):
-            raise HTTPException(status_code=403, detail="Cannot modify admin account.")
-        if body.memberNumber != member_id:
-            conflict = next((m for m in members_store if m["member_number"] == body.memberNumber), None)
-            if conflict is not None:
-                raise HTTPException(status_code=409, detail="A member with that number already exists.")
-        member["member_number"] = body.memberNumber
-        member["first_name"] = body.firstName
-        member["last_name"] = body.lastName
-        member["address_street"] = body.addressStreet
-        member["address_city"] = body.addressCity
-        member["address_state"] = body.addressState
-        member["address_zip"] = body.addressZip
-        member["phone"] = body.phone
-        member["birthday"] = body.birthday
-        member["email"] = body.email
-        member["assembly_number"] = body.assemblyNumber
-        member["first_degree_date"] = body.firstDegreeDate
-        member["second_degree_date"] = body.secondDegreeDate
-        member["third_degree_date"] = body.thirdDegreeDate
-        member["fourth_degree_date"] = body.fourthDegreeDate
-        if body.passcode:
-            member["passcode"] = body.passcode
+    member = members_repo.get_by_number(member_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if _is_admin_member(member) and not _payload.get("isAdmin"):
+        raise HTTPException(status_code=403, detail="Cannot modify admin account.")
+    if body.memberNumber != member_id:
+        conflict = members_repo.get_by_number(body.memberNumber)
+        if conflict is not None:
+            raise HTTPException(status_code=409, detail="A member with that number already exists.")
+    fields: dict = {
+        "first_name": body.firstName,
+        "last_name": body.lastName,
+        "address_street": body.addressStreet,
+        "address_city": body.addressCity,
+        "address_state": body.addressState,
+        "address_zip": body.addressZip,
+        "phone": body.phone,
+        "birthday": body.birthday,
+        "email": body.email,
+        "assembly_number": body.assemblyNumber,
+        "first_degree_date": body.firstDegreeDate,
+        "second_degree_date": body.secondDegreeDate,
+        "third_degree_date": body.thirdDegreeDate,
+        "fourth_degree_date": body.fourthDegreeDate,
+    }
+    if body.passcode:
+        fields["passcode"] = body.passcode
+    if body.memberNumber != member_id:
+        fields["member_number"] = body.memberNumber
+        members_repo.delete(member_id)
+        fields["officer_position"] = member.get("officer_position")
+        members_repo.create(fields)
+    else:
+        members_repo.update_full(member_id, fields)
+    if body.passcode and _COGNITO_USER_POOL_ID:
+        _cognito_set_password(member_id, body.passcode)
     return {"success": True, "message": "Member updated successfully."}
 
 
 @app.delete("/members/{member_id}")
 def delete_member(member_id: str, _payload: dict = Depends(_require_privileged_officer)):
-    with _members_lock:
-        idx = next((i for i, m in enumerate(members_store) if m["member_number"] == member_id), None)
-        if idx is None:
-            raise HTTPException(status_code=404, detail="Member not found")
-        if _is_admin_member(members_store[idx]):
-            raise HTTPException(status_code=403, detail="Cannot delete admin account.")
-        removed = members_store.pop(idx)
-    if removed.get("officer_position"):
-        with _officers_lock:
-            for officer in officers_store:
-                if officer.get("member_number") == member_id:
-                    officer["member_number"] = None
-                    officer["name"] = None
-                    officer["imageUrl"] = "/images/officers/default.png"
-                    break
+    member = members_repo.get_by_number(member_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if _is_admin_member(member):
+        raise HTTPException(status_code=403, detail="Cannot delete admin account.")
+    members_repo.delete(member_id)
+    if member.get("officer_position"):
+        officers_repo.clear_slot(member["officer_position"])
+    if _COGNITO_USER_POOL_ID:
+        _cognito_delete_user(member_id)
     return {"success": True, "message": "Member deleted successfully."}
 
 
@@ -592,24 +654,91 @@ def delete_member(member_id: str, _payload: dict = Depends(_require_privileged_o
 def update_admin_password(body: AdminPasswordUpdateRequest, payload: dict = Depends(_require_auth)):
     if not payload.get("isAdmin"):
         raise HTTPException(status_code=403, detail="Admin access required.")
-    with _members_lock:
-        member = next((m for m in members_store if m["member_number"] == ADMIN_MEMBER_NUMBER), None)
-        if member is None:
+    if _COGNITO_USER_POOL_ID:
+        _cognito_set_password(ADMIN_MEMBER_NUMBER, body.passcode)
+    else:
+        result = members_repo.update_passcode(ADMIN_MEMBER_NUMBER, body.passcode)
+        if result is None:
             raise HTTPException(status_code=404, detail="Admin account not found.")
-        member["passcode"] = body.passcode
     return {"success": True, "message": "Password updated successfully."}
+
+
+def _cognito_change_password(username: str, current_password: str, new_password: str) -> None:
+    import boto3
+    client = boto3.client("cognito-idp", region_name=_COGNITO_REGION)
+    try:
+        resp = client.initiate_auth(
+            ClientId=_COGNITO_APP_CLIENT_ID,
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={"USERNAME": username, "PASSWORD": current_password},
+        )
+    except (client.exceptions.NotAuthorizedException, client.exceptions.UserNotFoundException):
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    access_token = resp.get("AuthenticationResult", {}).get("AccessToken")
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    try:
+        client.change_password(
+            PreviousPassword=current_password,
+            ProposedPassword=new_password,
+            AccessToken=access_token,
+        )
+    except client.exceptions.InvalidPasswordException as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+def _cognito_set_password(username: str, new_password: str) -> None:
+    import boto3
+    client = boto3.client("cognito-idp", region_name=_COGNITO_REGION)
+    client.admin_set_user_password(
+        UserPoolId=_COGNITO_USER_POOL_ID,
+        Username=username,
+        Password=new_password,
+        Permanent=True,
+    )
+
+
+def _cognito_delete_user(username: str) -> None:
+    import boto3
+    client = boto3.client("cognito-idp", region_name=_COGNITO_REGION)
+    try:
+        client.admin_delete_user(UserPoolId=_COGNITO_USER_POOL_ID, Username=username)
+    except client.exceptions.UserNotFoundException:
+        pass
+
+
+def _cognito_create_user(username: str, password: str, email: str = "") -> None:
+    import boto3
+    client = boto3.client("cognito-idp", region_name=_COGNITO_REGION)
+    user_attrs = []
+    if email:
+        user_attrs.append({"Name": "email", "Value": email})
+        user_attrs.append({"Name": "email_verified", "Value": "true"})
+    client.admin_create_user(
+        UserPoolId=_COGNITO_USER_POOL_ID,
+        Username=username,
+        UserAttributes=user_attrs,
+        TemporaryPassword=password,
+        MessageAction="SUPPRESS",
+    )
+    client.admin_set_user_password(
+        UserPoolId=_COGNITO_USER_POOL_ID,
+        Username=username,
+        Password=password,
+        Permanent=True,
+    )
 
 
 @app.get("/prayer-requests")
 def get_prayer_requests(_payload: dict = Depends(_require_auth)):
-    return [_prayer_request_to_response(r) for r in prayer_requests_store]
+    return [_prayer_request_to_response(r) for r in prayer_requests_repo.list_all()]
 
 
 @app.get("/prayer-requests/public")
 def get_prayer_requests_public():
     return [
-        {"id": r["id"], "text": r.get("text", ""), "submittedAt": r["submitted_at"]}
-        for r in prayer_requests_store
+        {"id": r["id"], "text": r.get("text", ""), "submittedAt": r.get("submitted_at", "")}
+        for r in prayer_requests_repo.list_public()
     ]
 
 
@@ -624,37 +753,95 @@ def create_prayer_request(body: PrayerRequestCreate, payload: dict = Depends(_re
         "submitted_by": payload["sub"],
         "submitted_at": date.today().isoformat() + "T00:00:00Z",
     }
-    prayer_requests_store.insert(0, record)
+    prayer_requests_repo.create(record)
     logger.info("S3 stub: would write prayer request to %s", s3_key)
     return {"success": True, "message": "Prayer request submitted."}
 
 
 @app.delete("/prayer-requests/{request_id}")
 def delete_prayer_request(request_id: str, payload: dict = Depends(_require_auth)):
-    for i, r in enumerate(prayer_requests_store):
-        if r["id"] == request_id:
-            if r["submitted_by"] != payload["sub"] and not payload.get("isOfficer"):
-                raise HTTPException(status_code=403, detail="You can only delete your own prayer requests.")
-            prayer_requests_store.pop(i)
-            return {"success": True, "message": "Prayer request deleted."}
-    raise HTTPException(status_code=404, detail="Prayer request not found.")
+    record = prayer_requests_repo.get_by_id(request_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Prayer request not found.")
+    if record["submitted_by"] != payload["sub"] and not payload.get("isOfficer"):
+        raise HTTPException(status_code=403, detail="You can only delete your own prayer requests.")
+    prayer_requests_repo.delete(request_id)
+    return {"success": True, "message": "Prayer request deleted."}
 
 
 @app.get("/meeting-minutes")
 def get_meeting_minutes(_payload: dict = Depends(_require_auth)):
     return [
-        {"id": m["id"], "title": m["title"], "meetingDate": m["meeting_date"], "s3Key": m["s3_key"]}
-        for m in meeting_minutes_store
+        {"id": m["id"], "title": m.get("title", ""), "meetingDate": m.get("meeting_date", ""), "s3Key": m.get("s3_key", "")}
+        for m in meeting_minutes_repo.list_all()
     ]
 
 
 @app.get("/meeting-minutes/{minutes_id}")
 def get_meeting_minutes_detail(minutes_id: str, _payload: dict = Depends(_require_auth)):
-    entry = next((m for m in meeting_minutes_store if m["id"] == minutes_id), None)
+    entry = meeting_minutes_repo.get_by_id(minutes_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Meeting minutes not found")
-    logger.info("S3 stub: would generate pre-signed URL for %s", entry["s3_key"])
-    return {"id": entry["id"], "title": entry["title"], "meetingDate": entry["meeting_date"], "url": entry["s3_key"]}
+    s3_key = entry.get("s3_key", "")
+    url = s3_key
+    if s3_key:
+        import boto3
+        s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": "koc830-assets", "Key": s3_key},
+            ExpiresIn=3600,
+        )
+    return {"id": entry["id"], "title": entry.get("title", ""), "meetingDate": entry.get("meeting_date", ""), "url": url}
+
+
+@app.post("/meeting-minutes")
+async def create_meeting_minutes(
+    title: str = Form(..., min_length=1, max_length=200),
+    meetingDate: str = Form(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    file: UploadFile = File(...),
+    payload: dict = Depends(_require_officer),
+):
+    try:
+        date.fromisoformat(meetingDate)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="meetingDate must be a valid YYYY-MM-DD date")
+    content = await file.read()
+    if not content[:5].startswith(b"%PDF"):
+        raise HTTPException(status_code=422, detail="Only PDF files are allowed.")
+    new_id = str(uuid.uuid4())
+    parsed_date = date.fromisoformat(meetingDate)
+    s3_key = f"meeting-minutes/{parsed_date.strftime('%Y/%m')}/{new_id}.pdf"
+    import boto3
+    s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+    s3.put_object(Bucket="koc830-assets", Key=s3_key, Body=content, ContentType="application/pdf")
+    now = _now_iso_precise()
+    record = {
+        "id": new_id,
+        "title": title,
+        "meeting_date": meetingDate,
+        "s3_key": s3_key,
+        "created_by": payload["sub"],
+        "created_at": now,
+    }
+    meeting_minutes_repo.create(record)
+    return {"success": True, "message": "Meeting minutes uploaded.", "id": new_id}
+
+
+@app.delete("/meeting-minutes/{minutes_id}")
+def delete_meeting_minutes(minutes_id: str, _payload: dict = Depends(_require_officer)):
+    entry = meeting_minutes_repo.get_by_id(minutes_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Meeting minutes not found.")
+    if entry.get("s3_key"):
+        import boto3
+        s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        try:
+            s3.delete_object(Bucket="koc830-assets", Key=entry["s3_key"])
+        except Exception:
+            logger.warning("Failed to delete S3 object: %s", entry["s3_key"])
+    meeting_minutes_repo.delete(minutes_id)
+    return {"success": True, "message": "Meeting minutes deleted."}
 
 
 @app.get("/events")
@@ -669,62 +856,57 @@ def get_events(month: str | None = None):
     if month is not None:
         if len(month) != 7 or month[4] != "-":
             raise HTTPException(status_code=400, detail="month must be in YYYY-MM format")
-        filtered = [e for e in events_store if e["day"].startswith(month)]
+        items = events_repo.list_by_month(month)
     else:
-        filtered = list(events_store)
-    return [_event_to_response(e) for e in filtered]
+        items = events_repo.list_all()
+    return [_event_to_response(e) for e in items]
 
 
 @app.post("/events")
 def create_event(body: EventCreate, payload: dict = Depends(_require_officer)):
+    if events_repo.count_by_day(body.day) >= 3:
+        raise HTTPException(status_code=409, detail="This day already has the maximum of 3 events.")
     new_id = str(uuid.uuid4())
     now = _now_iso()
-    with _events_lock:
-        same_day_count = sum(1 for e in events_store if e["day"] == body.day)
-        if same_day_count >= 3:
-            raise HTTPException(status_code=409, detail="This day already has the maximum of 3 events.")
-        record = {
-            "id": new_id,
-            "day": body.day,
-            "title": body.title,
-            "description": body.description,
-            "time_of_day": body.timeOfDay,
-            "location": body.location,
-            "created_by": payload["sub"],
-            "created_at": now,
-            "updated_at": now,
-        }
-        events_store.append(record)
+    record = {
+        "id": new_id,
+        "day": body.day,
+        "title": body.title,
+        "description": body.description,
+        "time_of_day": body.timeOfDay,
+        "location": body.location,
+        "created_by": payload["sub"],
+        "created_at": now,
+        "updated_at": now,
+    }
+    events_repo.create(record)
     return {"success": True, "message": "Event created.", "id": new_id}
 
 
 @app.put("/events/{event_id}")
 def update_event(event_id: str, body: EventUpdate, payload: dict = Depends(_require_officer)):
-    with _events_lock:
-        record = next((e for e in events_store if e["id"] == event_id), None)
-        if record is None:
-            raise HTTPException(status_code=404, detail="Event not found.")
-        if body.day != record["day"]:
-            same_day_count = sum(1 for e in events_store if e["day"] == body.day and e["id"] != event_id)
-            if same_day_count >= 3:
-                raise HTTPException(status_code=409, detail="Target day already has the maximum of 3 events.")
-        record["day"] = body.day
-        record["title"] = body.title
-        record["description"] = body.description
-        record["time_of_day"] = body.timeOfDay
-        record["location"] = body.location
-        record["updated_at"] = _now_iso()
+    record = events_repo.get_by_id(event_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Event not found.")
+    if body.day != record["day"]:
+        if events_repo.count_by_day(body.day) >= 3:
+            raise HTTPException(status_code=409, detail="Target day already has the maximum of 3 events.")
+    events_repo.update(event_id, {
+        "day": body.day,
+        "title": body.title,
+        "description": body.description,
+        "time_of_day": body.timeOfDay,
+        "location": body.location,
+        "updated_at": _now_iso(),
+    })
     return {"success": True, "message": "Event updated."}
 
 
 @app.delete("/events/{event_id}")
 def delete_event(event_id: str, _payload: dict = Depends(_require_officer)):
-    with _events_lock:
-        for i, e in enumerate(events_store):
-            if e["id"] == event_id:
-                events_store.pop(i)
-                return {"success": True, "message": "Event deleted."}
-    raise HTTPException(status_code=404, detail="Event not found.")
+    if not events_repo.delete(event_id):
+        raise HTTPException(status_code=404, detail="Event not found.")
+    return {"success": True, "message": "Event deleted."}
 
 
 @app.get("/announcements")
@@ -735,27 +917,24 @@ def get_announcements():
     sorted by ``created_at`` descending (newest first; id ascending as a
     deterministic tiebreaker for identical timestamps).
     """
-    today = _today()
-    visible = [a for a in announcements_store if date.fromisoformat(a["delete_date"]) >= today]
-    visible.sort(key=lambda a: (a["created_at"], a["id"]), reverse=True)
-    return [_announcement_to_response(a) for a in visible]
+    items = announcements_repo.list_active(_today().isoformat())
+    return [_announcement_to_response(a) for a in items]
 
 
 @app.post("/announcements")
 def create_announcement(body: AnnouncementCreate, payload: dict = Depends(_require_officer)):
     new_id = str(uuid.uuid4())
     now = _now_iso()
-    with _announcements_lock:
-        record = {
-            "id": new_id,
-            "title": body.title,
-            "details": body.details,
-            "delete_date": body.deleteDate,
-            "created_by": payload["sub"],
-            "created_at": now,
-            "updated_at": now,
-        }
-        announcements_store.append(record)
+    record = {
+        "id": new_id,
+        "title": body.title,
+        "details": body.details,
+        "delete_date": body.deleteDate,
+        "created_by": payload["sub"],
+        "created_at": now,
+        "updated_at": now,
+    }
+    announcements_repo.create(record)
     return {"success": True, "message": "Announcement created.", "id": new_id}
 
 
@@ -765,25 +944,23 @@ def update_announcement(
     body: AnnouncementUpdate,
     _payload: dict = Depends(_require_officer),
 ):
-    with _announcements_lock:
-        record = next((a for a in announcements_store if a["id"] == announcement_id), None)
-        if record is None:
-            raise HTTPException(status_code=404, detail="Announcement not found.")
-        record["title"] = body.title
-        record["details"] = body.details
-        record["delete_date"] = body.deleteDate
-        record["updated_at"] = _now_iso()
+    existing = announcements_repo.get_by_id(announcement_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Announcement not found.")
+    announcements_repo.update(announcement_id, {
+        "title": body.title,
+        "details": body.details,
+        "delete_date": body.deleteDate,
+        "updated_at": _now_iso(),
+    })
     return {"success": True, "message": "Announcement updated."}
 
 
 @app.delete("/announcements/{announcement_id}")
 def delete_announcement(announcement_id: str, _payload: dict = Depends(_require_officer)):
-    with _announcements_lock:
-        for i, a in enumerate(announcements_store):
-            if a["id"] == announcement_id:
-                announcements_store.pop(i)
-                return {"success": True, "message": "Announcement deleted."}
-    raise HTTPException(status_code=404, detail="Announcement not found.")
+    if not announcements_repo.delete(announcement_id):
+        raise HTTPException(status_code=404, detail="Announcement not found.")
+    return {"success": True, "message": "Announcement deleted."}
 
 
 @app.get("/photos")
@@ -794,24 +971,22 @@ def get_photos():
     (oldest first; id ascending as a deterministic tiebreaker), so the
     most recently added photo appears at the bottom of the two-column grid.
     """
-    ordered = sorted(photos_store, key=lambda p: (p["created_at"], p["id"]))
-    return [_photo_to_response(p) for p in ordered]
+    return [_photo_to_response(p) for p in photos_repo.list_all()]
 
 
 @app.post("/photos")
 def create_photo(body: PhotoCreate, payload: dict = Depends(_require_officer)):
     new_id = str(uuid.uuid4())
     now = _now_iso_precise()
-    with _photos_lock:
-        record = {
-            "id": new_id,
-            "title": body.title,
-            "photo_url": body.photoUrl,
-            "created_by": payload["sub"],
-            "created_at": now,
-            "updated_at": now,
-        }
-        photos_store.append(record)
+    record = {
+        "id": new_id,
+        "title": body.title,
+        "photo_url": body.photoUrl,
+        "created_by": payload["sub"],
+        "created_at": now,
+        "updated_at": now,
+    }
+    photos_repo.create(record)
     return {"success": True, "message": "Photo added.", "id": new_id}
 
 
@@ -821,24 +996,22 @@ def update_photo(
     body: PhotoUpdate,
     _payload: dict = Depends(_require_officer),
 ):
-    with _photos_lock:
-        record = next((p for p in photos_store if p["id"] == photo_id), None)
-        if record is None:
-            raise HTTPException(status_code=404, detail="Photo not found.")
-        record["title"] = body.title
-        record["photo_url"] = body.photoUrl
-        record["updated_at"] = _now_iso_precise()
+    existing = photos_repo.get_by_id(photo_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    photos_repo.update(photo_id, {
+        "title": body.title,
+        "photo_url": body.photoUrl,
+        "updated_at": _now_iso_precise(),
+    })
     return {"success": True, "message": "Photo updated."}
 
 
 @app.delete("/photos/{photo_id}")
 def delete_photo(photo_id: str, _payload: dict = Depends(_require_officer)):
-    with _photos_lock:
-        for i, p in enumerate(photos_store):
-            if p["id"] == photo_id:
-                photos_store.pop(i)
-                return {"success": True, "message": "Photo deleted."}
-    raise HTTPException(status_code=404, detail="Photo not found.")
+    if not photos_repo.delete(photo_id):
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    return {"success": True, "message": "Photo deleted."}
 
 
 @app.get("/officers")
@@ -851,12 +1024,12 @@ def get_officers(request: Request):
     """
     base = str(request.base_url).rstrip("/")
     result = []
-    for o in officers_store:
+    for o in officers_repo.list_all():
         if o.get("photo_data"):
             photo_url = f"{base}{o['photo_url']}"
         else:
-            photo_url = o["photo_url"]
-        result.append({"title": o["title"], "name": o["name"], "photoUrl": photo_url})
+            photo_url = o.get("photo_url", "/officers/placeholder.png")
+        result.append({"title": o["title"], "name": o.get("name", "Vacant"), "photoUrl": photo_url})
     return result
 
 
@@ -864,7 +1037,7 @@ def get_officers(request: Request):
 def update_officer(title: str, body: OfficerUpdateRequest, payload: dict = Depends(_require_privileged_officer)):
     if title not in OFFICER_TITLES:
         raise HTTPException(status_code=404, detail="Officer title not found.")
-    member = next((m for m in members_store if m["member_number"] == body.memberNumber), None)
+    member = members_repo.get_by_number(body.memberNumber)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found.")
     if _is_admin_member(member):
@@ -875,44 +1048,46 @@ def update_officer(title: str, body: OfficerUpdateRequest, payload: dict = Depen
         raise HTTPException(status_code=422, detail="Invalid base64 photo data.")
     if photo_bytes[:4] != b"\x89PNG":
         raise HTTPException(status_code=422, detail="Only PNG photos are allowed.")
-    with _officers_lock:
-        officer_entry = next((o for o in officers_store if o["title"] == title), None)
-        if officer_entry is None:
-            raise HTTPException(status_code=404, detail="Officer title not found.")
-        old_member_number = officer_entry["member_number"]
-        if old_member_number and old_member_number != body.memberNumber:
-            old_member = next((m for m in members_store if m["member_number"] == old_member_number), None)
-            if old_member:
-                old_member["officer_position"] = None
-        member["officer_position"] = title
-        slug = title.lower().replace(" ", "-").replace("---", "-")
-        officer_entry["member_number"] = body.memberNumber
-        officer_entry["name"] = f"{member['first_name']} {member['last_name']}"
-        officer_entry["photo_url"] = f"/officers/photos/{slug}.png"
-        officer_entry["photo_data"] = body.photoData
+    officer_entry = officers_repo.get_by_title(title)
+    if officer_entry is None:
+        raise HTTPException(status_code=404, detail="Officer title not found.")
+    old_member_number = officer_entry.get("member_number")
+    slug = title.lower().replace(" ", "-").replace("---", "-")
+    photo_url = f"/officers/photos/{slug}.png"
+    name = f"{member.get('first_name', '')} {member.get('last_name', '')}"
+    officers_repo.swap_officer(
+        title=title,
+        new_member_number=body.memberNumber,
+        new_name=name,
+        photo_url=photo_url,
+        photo_data=photo_bytes,
+        old_member_number=old_member_number,
+    )
     return {"success": True, "message": "Officer updated."}
 
 
 @app.get("/officers/photos/{filename}")
 def get_officer_photo(filename: str):
     slug = filename.removesuffix(".png")
-    for o in officers_store:
-        entry_slug = o["title"].lower().replace(" ", "-").replace("---", "-")
-        if entry_slug == slug and o.get("photo_data"):
-            photo_bytes = base64.b64decode(o["photo_data"])
-            return Response(content=photo_bytes, media_type="image/png")
-    raise HTTPException(status_code=404, detail="Officer photo not found.")
+    photo_data = officers_repo.get_photo_by_slug(slug)
+    if photo_data is None:
+        raise HTTPException(status_code=404, detail="Officer photo not found.")
+    if isinstance(photo_data, str):
+        photo_data = base64.b64decode(photo_data)
+    elif not isinstance(photo_data, bytes):
+        photo_data = bytes(photo_data)
+    return Response(content=photo_data, media_type="image/png")
 
 
 @app.post("/emails/officer")
 def email_officer(body: EmailOfficerRequest, payload: dict = Depends(_require_auth)):
-    officer = next((m for m in members_store if m.get("officer_position") == body.officerTitle), None)
+    officer = members_repo.get_by_officer_position(body.officerTitle)
     if officer is None:
         raise HTTPException(status_code=404, detail="Officer not found")
-    sender = next((m for m in members_store if m["member_number"] == payload["sub"]), None)
+    sender = members_repo.get_by_number(payload["sub"])
     sender_name = f"{sender['first_name']} {sender['last_name']}" if sender else "A council member"
     _send_email(
-        officer["email"],
+        officer.get("email", ""),
         f"Message from {sender_name}",
         body.message,
     )
@@ -921,7 +1096,7 @@ def email_officer(body: EmailOfficerRequest, payload: dict = Depends(_require_au
 
 @app.post("/nominations")
 def submit_nomination(body: NominationRequest, _payload: dict = Depends(_require_auth)):
-    officer_emails = [m["email"] for m in members_store if _is_officer(m.get("officer_position"))]
+    officer_emails = members_repo.get_officer_emails()
     nomination_body = (
         f"Knight of the Month: {body.knightOfMonth}\n"
         f"Family of the Month: {body.familyOfMonth}"
@@ -932,6 +1107,6 @@ def submit_nomination(body: NominationRequest, _payload: dict = Depends(_require
 
 @app.post("/emails/all-members")
 def email_all_members(body: EmailAllMembersRequest, _payload: dict = Depends(_require_officer)):
-    all_emails = [m["email"] for m in members_store if not _is_admin_member(m)]
+    all_emails = members_repo.get_all_emails()
     _send_email(all_emails, "Message from Council 830 Officers", body.message)
     return {"success": True, "message": "Message sent to all members."}

@@ -72,14 +72,30 @@ export function OfficerEditModal({ title, token, onClose, onSaved, onError }: Of
     setPhotoFile(file);
   };
 
+  const resizeImage = (file: File, maxWidth: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("Canvas not supported")); return; }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/png");
+        resolve(dataUrl.split(",")[1]);
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
   const handleSave = async () => {
     if (!canSave || !photoFile) return;
     setSubmitting(true);
     try {
-      const buffer = await photoFile.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ""),
-      );
+      const base64 = await resizeImage(photoFile, 350);
       const result = await updateOfficer(token, title, {
         memberNumber: selectedMember,
         photoData: base64,

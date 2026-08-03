@@ -21,3 +21,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
+
+docs/Admin.md
+docs/KoC 2025 Christmas Raw List.xlsx

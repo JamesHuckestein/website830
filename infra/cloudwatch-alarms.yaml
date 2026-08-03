@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: KoC Council 830 — CloudWatch alarms for DynamoDB tables
+
+Parameters:
+  TablePrefix:
+    Type: String
+    Default: koc830-prod-
+    Description: Must match the prefix used in dynamodb-tables.yaml
+  AlarmEmail:
+    Type: String
+    Description: Email address for alarm notifications
+
+Resources:
+
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${TablePrefix}dynamo-alarms"
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlarmEmail
+
+  ThrottledRequestsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${TablePrefix}dynamo-throttled-requests"
+      AlarmDescription: DynamoDB requests are being throttled
+      Namespace: AWS/DynamoDB
+      MetricName: ThrottledRequests
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      Dimensions: []
+
+  SystemErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${TablePrefix}dynamo-system-errors"
+      AlarmDescription: DynamoDB system errors detected
+      Namespace: AWS/DynamoDB
+      MetricName: SystemErrors
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      Dimensions: []
+
+  UserErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${TablePrefix}dynamo-user-errors"
+      AlarmDescription: High rate of DynamoDB user errors (conditional check failures, validation)
+      Namespace: AWS/DynamoDB
+      MetricName: UserErrors
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 50
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      Dimensions: []
+
+Outputs:
+  AlarmTopicArn:
+    Value: !Ref AlarmTopic
+    Description: SNS topic ARN receiving alarm notifications

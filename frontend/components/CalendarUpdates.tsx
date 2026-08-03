@@ -294,9 +294,9 @@ export function CalendarUpdates({ token, onBack }: CalendarUpdatesProps) {
         <button
           type="button"
           onClick={onBack}
-          className="text-sm text-[#4169E1] underline"
+          className="rounded-md border border-[#888888] px-3 py-1 text-sm font-semibold text-[#032147]"
         >
-          Back to Members Area
+          Back
         </button>
       </section>
     </>

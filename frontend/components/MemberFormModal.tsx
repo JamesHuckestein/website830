@@ -31,15 +31,18 @@ export function MemberFormModal({ mode, member, submitting, error, onSave, onCan
   const [thirdDegreeDate, setThirdDegreeDate] = useState(member?.thirdDegreeDate ?? "");
   const [fourthDegreeDate, setFourthDegreeDate] = useState(member?.fourthDegreeDate ?? "");
 
+  const isValidPassword = (pw: string) =>
+    pw.length >= 8 && /[A-Z]/.test(pw) && /[a-z]/.test(pw) && /[0-9]/.test(pw);
+
+  const passwordProvided = passcode.trim() !== "";
+  const passwordValid = !passwordProvided || isValidPassword(passcode.trim());
+
   const requiredFilled =
     memberNumber.trim() !== "" &&
-    (mode === "edit" || passcode.trim() !== "") &&
+    (mode === "edit" || passwordProvided) &&
+    passwordValid &&
     firstName.trim() !== "" &&
     lastName.trim() !== "" &&
-    addressStreet.trim() !== "" &&
-    addressCity.trim() !== "" &&
-    addressState.trim() !== "" &&
-    addressZip.trim() !== "" &&
     birthday !== "" &&
     firstDegreeDate !== "" &&
     secondDegreeDate !== "" &&
@@ -77,14 +80,18 @@ export function MemberFormModal({ mode, member, submitting, error, onSave, onCan
           {mode === "add" ? "Add Member" : "Edit Member"}
         </h2>
         <form onSubmit={handleSubmit} autoComplete="off" className="space-y-3">
-          <Field name="mnum" label="Member Number *" value={memberNumber} onChange={setMemberNumber} disabled={mode === "edit"} placeholder="830XXXX" />
+          <Field name="mnum" label="Member Number *" value={memberNumber} onChange={setMemberNumber} disabled={mode === "edit"} placeholder="Member ID" />
           <Field name="mpass" label={mode === "add" ? "Password *" : "Password"} value={passcode} onChange={setPasscode} placeholder={mode === "edit" ? "Leave blank for no change" : ""} />
+          <p className="text-xs text-[#888888]">Minimum 8 characters, must include uppercase, lowercase, and a number.</p>
+          {passwordProvided && !passwordValid && (
+            <p className="text-xs text-red-700">Password does not meet requirements.</p>
+          )}
           <Field name="fname" label="First Name *" value={firstName} onChange={setFirstName} />
           <Field name="lname" label="Last Name *" value={lastName} onChange={setLastName} />
-          <Field name="mstreet" label="Street Address *" value={addressStreet} onChange={setAddressStreet} />
-          <Field name="mcity" label="City *" value={addressCity} onChange={setAddressCity} />
-          <Field name="mst" label="State *" value={addressState} onChange={setAddressState} maxLength={2} />
-          <Field name="mzip" label="Zip Code *" value={addressZip} onChange={setAddressZip} />
+          <Field name="mstreet" label="Street Address" value={addressStreet} onChange={setAddressStreet} />
+          <Field name="mcity" label="City" value={addressCity} onChange={setAddressCity} />
+          <Field name="mst" label="State" value={addressState} onChange={setAddressState} maxLength={2} />
+          <Field name="mzip" label="Zip Code" value={addressZip} onChange={setAddressZip} />
           <Field name="mphone" label="Phone" value={phone} onChange={setPhone} />
           <DateField name="mbday" label="Birthday *" value={birthday} onChange={setBirthday} />
           <Field name="memail" label="Email" value={email} onChange={setEmail} />

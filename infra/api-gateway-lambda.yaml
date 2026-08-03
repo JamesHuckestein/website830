@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: KoC Council 830 — API Gateway HTTP API + Lambda (FastAPI backend)
+
+Parameters:
+  TablePrefix:
+    Type: String
+    Default: koc830-prod-
+  BackendRoleArn:
+    Type: String
+    Description: ARN of the backend IAM role (from iam-dynamodb-policy stack)
+  S3CodeBucket:
+    Type: String
+    Description: S3 bucket containing the Lambda deployment package
+  S3CodeKey:
+    Type: String
+    Description: S3 key for the Lambda zip file
+  CognitoUserPoolId:
+    Type: String
+    Description: Cognito User Pool ID
+  CognitoAppClientId:
+    Type: String
+    Description: Cognito App Client ID
+  CorsOrigins:
+    Type: String
+    Default: "*"
+    Description: Comma-separated list of allowed CORS origins
+  EmailGatewayUrl:
+    Type: String
+    Default: ""
+    Description: URL of the email Lambda function (leave empty to stub)
+
+Resources:
+
+  BackendFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${TablePrefix}backend"
+      Runtime: python3.13
+      Handler: app.handler.handler
+      Role: !Ref BackendRoleArn
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          DYNAMO_TABLE_PREFIX: !Ref TablePrefix
+          AWS_REGION_OVERRIDE: !Ref "AWS::Region"
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          COGNITO_APP_CLIENT_ID: !Ref CognitoAppClientId
+          CORS_ORIGINS: !Ref CorsOrigins
+          EMAIL_GATEWAY_URL: !Ref EmailGatewayUrl
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${TablePrefix}api"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - "*"
+        AllowHeaders:
+          - "*"
+
+  LambdaIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt BackendFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "$default"
+      Target: !Sub "integrations/${LambdaIntegration}"
+
+  DefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BackendFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Description: API Gateway endpoint URL
+  ApiId:
+    Value: !Ref HttpApi
+    Description: API Gateway ID
+  FunctionName:
+    Value: !Ref BackendFunction
+    Description: Lambda function name

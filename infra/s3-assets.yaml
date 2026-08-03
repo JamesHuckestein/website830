@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: KoC Council 830 — S3 assets bucket configuration and IAM policy
+
+Parameters:
+  BucketName:
+    Type: String
+    Default: koc830-assets
+    Description: Name of the existing S3 bucket for application assets
+  TablePrefix:
+    Type: String
+    Default: koc830-dev-
+    Description: Must match the prefix used in iam-dynamodb-policy.yaml for role attachment
+
+Resources:
+
+  AssetsAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${TablePrefix}s3-assets-access"
+      Description: Read/write access to KoC 830 assets bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ReadWriteAssets
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+            Resource:
+              - !Sub "arn:aws:s3:::${BucketName}"
+              - !Sub "arn:aws:s3:::${BucketName}/*"
+          - Sid: GeneratePresignedUrls
+            Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource:
+              - !Sub "arn:aws:s3:::${BucketName}/meeting-minutes/*"
+              - !Sub "arn:aws:s3:::${BucketName}/gallery/*"
+
+  BucketCorsConfiguration:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref BucketName
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+            AllowedOrigins:
+              - "http://localhost:3000"
+              - "https://*.cloudfront.net"
+            MaxAge: 3600
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionOldMinutesToGlacier
+            Prefix: meeting-minutes/
+            Status: Enabled
+            Transitions:
+              - StorageClass: GLACIER
+                TransitionInDays: 730
+
+Outputs:
+  AssetsAccessPolicyArn:
+    Value: !Ref AssetsAccessPolicy
+    Description: Policy ARN to attach to the backend role for S3 access
+  BucketArn:
+    Value: !Sub "arn:aws:s3:::${BucketName}"
+    Description: Assets bucket ARN
