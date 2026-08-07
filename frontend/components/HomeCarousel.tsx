@@ -4,17 +4,36 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 
 import { FacilitiesManagerForm } from "@/components/FacilitiesManagerForm";
-import { aboutCouncilDetails, councilInfo } from "@/data/siteData";
+import { getOfficers, type OfficerResponse } from "@/lib/api";
+import { aboutCouncilDetails, councilInfo, officers as staticOfficers } from "@/data/siteData";
 import type { Officer } from "@/data/siteData";
 
 type HomeCarouselProps = {
-  officers: Officer[];
   onOpenOfficers: () => void;
 };
 
-export function HomeCarousel({ officers, onOpenOfficers }: HomeCarouselProps) {
+export function HomeCarousel({ onOpenOfficers }: HomeCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showFacilitiesForm, setShowFacilitiesForm] = useState(false);
+  const [liveOfficers, setLiveOfficers] = useState<{ name: string; title: string; imageUrl: string }[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getOfficers()
+      .then((data) => {
+        if (!cancelled) {
+          setLiveOfficers(data.map((o: OfficerResponse) => ({
+            name: o.name,
+            title: o.title,
+            imageUrl: o.photoUrl,
+          })));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const officers: { name: string; title: string; imageUrl: string }[] = liveOfficers ?? staticOfficers;
   const total = officers.length;
 
   useEffect(() => {

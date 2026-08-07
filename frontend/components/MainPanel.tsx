@@ -23,7 +23,6 @@ import { PrayerRequests } from "@/components/PrayerRequests";
 import { PublicPrayerRequests } from "@/components/PublicPrayerRequests";
 import {
   aboutCouncilDetails,
-  officers,
   sectionContent,
   type MemberSubSection,
   type SectionId,
@@ -69,7 +68,6 @@ export function MainPanel({
   if (activeSection === "home") {
     return (
       <HomeCarousel
-        officers={officers}
         onOpenOfficers={() => onNavigateToSection("officers")}
       />
     );
