@@ -124,10 +124,12 @@ def lambda_handler(event, context):
     recipients = [to] if isinstance(to, str) else list(to)
     html = _build_html(text)
 
-    for address in recipients:
+    batch_size = 30
+    for i in range(0, len(recipients), batch_size):
+        batch = recipients[i:i + batch_size]
         _ses.send_email(
             Source=_FROM,
-            Destination={"ToAddresses": [address]},
+            Destination={"ToAddresses": [_FROM], "BccAddresses": batch},
             Message={
                 "Subject": {"Data": subject},
                 "Body": {
