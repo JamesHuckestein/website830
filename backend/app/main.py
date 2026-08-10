@@ -427,7 +427,7 @@ def _send_email(to: str | list[str], subject: str, body: str) -> None:
     if not _EMAIL_GATEWAY_URL:
         logger.info("Email stub (EMAIL_GATEWAY_URL not set): to=%s subject=%s", to, subject)
         return
-    httpx.post(_EMAIL_GATEWAY_URL, json={"to": to, "subject": subject, "body": body}, timeout=10)
+    httpx.post(_EMAIL_GATEWAY_URL, json={"to": to, "subject": subject, "body": body}, timeout=120)
 
 
 

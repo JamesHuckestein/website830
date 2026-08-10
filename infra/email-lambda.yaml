@@ -55,7 +55,7 @@ Resources:
       Code:
         S3Bucket: !Ref S3CodeBucket
         S3Key: !Ref S3CodeKey
-      Timeout: 10
+      Timeout: 120
       MemorySize: 128
       Environment:
         Variables:
