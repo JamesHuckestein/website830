@@ -8,21 +8,19 @@ describe("PhotoFormModal", () => {
     render(<PhotoFormModal mode="add" onSave={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByRole("heading", { name: "Add Photo" })).toBeInTheDocument();
     expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe("");
-    expect((screen.getByLabelText("Upload Photo") as HTMLInputElement).value).toBe("");
   });
 
-  it("renders Edit headline and pre-fills fields in edit mode", () => {
+  it("renders Edit headline and pre-fills title in edit mode", () => {
     render(
       <PhotoFormModal
         mode="edit"
-        initialValues={{ title: "Spring Dinner", photoUrl: "/gallery/x.jpg" }}
+        initialTitle="Spring Dinner"
         onSave={vi.fn()}
         onCancel={vi.fn()}
       />,
     );
     expect(screen.getByRole("heading", { name: "Edit Photo" })).toBeInTheDocument();
     expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe("Spring Dinner");
-    expect((screen.getByLabelText("Upload Photo") as HTMLInputElement).value).toBe("/gallery/x.jpg");
   });
 
   it("shows the supported-formats helper text", () => {
@@ -36,16 +34,17 @@ describe("PhotoFormModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByText("Title is required.")).toBeInTheDocument();
-    expect(screen.getByText("Upload Photo is required.")).toBeInTheDocument();
+    expect(screen.getByText("A photo file is required.")).toBeInTheDocument();
   });
 
-  it("calls onSave with trimmed values when both fields are filled", () => {
+  it("calls onSave with trimmed title and file when both fields are filled", () => {
     const onSave = vi.fn();
     render(<PhotoFormModal mode="add" onSave={onSave} onCancel={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "  Charity Drive  " } });
-    fireEvent.change(screen.getByLabelText("Upload Photo"), { target: { value: "  /gallery/x.png  " } });
+    const file = new File(["fake"], "photo.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByLabelText("Upload Photo") as HTMLInputElement, { target: { files: [file] } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(onSave).toHaveBeenCalledWith({ title: "Charity Drive", photoUrl: "/gallery/x.png" });
+    expect(onSave).toHaveBeenCalledWith({ title: "Charity Drive", file });
   });
 
   it("calls onCancel when Cancel is clicked", () => {

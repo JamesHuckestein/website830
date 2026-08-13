@@ -311,30 +311,45 @@ export async function getPhotos(): Promise<Photo[]> {
   return res.json() as Promise<Photo[]>;
 }
 
-export type PhotoWriteBody = {
-  title: string;
-  photoUrl: string;
-};
-
 export async function createPhoto(
   token: string,
-  body: PhotoWriteBody,
+  title: string,
+  file: globalThis.File,
 ): Promise<{ success: boolean; message: string; id: string }> {
-  return apiFetch<{ success: boolean; message: string; id: string }>("/photos", token, {
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/photos`, {
     method: "POST",
-    body: JSON.stringify(body),
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
   });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+    throw new Error(err.detail || "Upload failed");
+  }
+  return res.json();
 }
 
 export async function updatePhoto(
   token: string,
   id: string,
-  body: PhotoWriteBody,
+  title: string,
+  file: globalThis.File,
 ): Promise<{ success: boolean; message: string }> {
-  return apiFetch<{ success: boolean; message: string }>(`/photos/${id}`, token, {
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/photos/${id}`, {
     method: "PUT",
-    body: JSON.stringify(body),
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
   });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+    throw new Error(err.detail || "Upload failed");
+  }
+  return res.json();
 }
 
 export async function deletePhoto(

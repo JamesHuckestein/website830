@@ -6,6 +6,7 @@ import os
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
+import boto3
 import httpx
 import jwt
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -158,38 +159,21 @@ class AnnouncementUpdate(_AnnouncementBody):
     pass
 
 
-class _PhotoBody(BaseModel):
-    """Shared request shape for POST /photos and PUT /photos/{id}.
-
-    Phase-2 dev: `photoUrl` is a plain string (path or URL). A future phase
-    swaps this for a multipart upload pipeline + S3 storage.
-    """
-    title: str = Field(min_length=1, max_length=200)
-    photoUrl: str = Field(min_length=1, max_length=2048)
-
-    @field_validator("title")
-    @classmethod
-    def _strip_title(cls, v: str) -> str:
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError("title cannot be blank")
-        return stripped
-
-    @field_validator("photoUrl")
-    @classmethod
-    def _strip_photo_url(cls, v: str) -> str:
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError("photoUrl cannot be blank")
-        return stripped
+_PHOTO_MAGIC = {
+    b"\xff\xd8\xff": ("jpeg", "image/jpeg"),
+    b"\x89PNG": ("png", "image/png"),
+    b"RIFF": ("webp", "image/webp"),
+    b"GIF8": ("gif", "image/gif"),
+}
 
 
-class PhotoCreate(_PhotoBody):
-    pass
-
-
-class PhotoUpdate(_PhotoBody):
-    pass
+def _detect_image_type(content: bytes) -> tuple[str, str] | None:
+    for magic, result in _PHOTO_MAGIC.items():
+        if content[:len(magic)] == magic:
+            if magic == b"RIFF" and content[8:12] != b"WEBP":
+                continue
+            return result
+    return None
 
 
 class OfficerUpdateRequest(BaseModel):
@@ -412,11 +396,15 @@ def _announcement_to_response(a: dict) -> dict:
     }
 
 
-def _photo_to_response(p: dict) -> dict:
+def _photo_to_response(p: dict, base: str = "") -> dict:
+    photo_url = p.get("photo_url", "")
+    if p.get("s3_key"):
+        filename = p["s3_key"].split("/")[-1]
+        photo_url = f"{base}/photos/images/{filename}"
     return {
         "id": p["id"],
         "title": p["title"],
-        "photoUrl": p["photo_url"],
+        "photoUrl": photo_url,
         "createdBy": p["created_by"],
         "createdAt": p["created_at"],
         "updatedAt": p["updated_at"],
@@ -993,24 +981,38 @@ def delete_announcement(announcement_id: str, _payload: dict = Depends(_require_
 
 
 @app.get("/photos")
-def get_photos():
+def get_photos(request: Request):
     """List all photos in the gallery.
 
     Public (no auth). Returns photos sorted by ``created_at`` ascending
     (oldest first; id ascending as a deterministic tiebreaker), so the
     most recently added photo appears at the bottom of the two-column grid.
     """
-    return [_photo_to_response(p) for p in photos_repo.list_all()]
+    base = str(request.base_url).rstrip("/")
+    return [_photo_to_response(p, base) for p in photos_repo.list_all()]
 
 
 @app.post("/photos")
-def create_photo(body: PhotoCreate, payload: dict = Depends(_require_officer)):
+async def create_photo(
+    title: str = Form(..., min_length=1, max_length=200),
+    file: UploadFile = File(...),
+    payload: dict = Depends(_require_officer),
+):
+    content = await file.read()
+    img_type = _detect_image_type(content)
+    if img_type is None:
+        raise HTTPException(status_code=422, detail="Only JPEG, PNG, WebP, and GIF images are allowed.")
+    ext, content_type = img_type
     new_id = str(uuid.uuid4())
+    s3_key = f"photos/{new_id}.{ext}"
+    s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+    s3.put_object(Bucket="koc830-assets", Key=s3_key, Body=content, ContentType=content_type)
     now = _now_iso_precise()
     record = {
         "id": new_id,
-        "title": body.title,
-        "photo_url": body.photoUrl,
+        "title": title.strip(),
+        "photo_url": f"/photos/images/{new_id}.{ext}",
+        "s3_key": s3_key,
         "created_by": payload["sub"],
         "created_at": now,
         "updated_at": now,
@@ -1020,17 +1022,30 @@ def create_photo(body: PhotoCreate, payload: dict = Depends(_require_officer)):
 
 
 @app.put("/photos/{photo_id}")
-def update_photo(
+async def update_photo(
     photo_id: str,
-    body: PhotoUpdate,
+    title: str = Form(..., min_length=1, max_length=200),
+    file: UploadFile = File(...),
     _payload: dict = Depends(_require_officer),
 ):
     existing = photos_repo.get_by_id(photo_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Photo not found.")
+    content = await file.read()
+    img_type = _detect_image_type(content)
+    if img_type is None:
+        raise HTTPException(status_code=422, detail="Only JPEG, PNG, WebP, and GIF images are allowed.")
+    ext, content_type = img_type
+    s3_key = f"photos/{photo_id}.{ext}"
+    s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+    s3.put_object(Bucket="koc830-assets", Key=s3_key, Body=content, ContentType=content_type)
+    old_s3_key = existing.get("s3_key")
+    if old_s3_key and old_s3_key != s3_key:
+        s3.delete_object(Bucket="koc830-assets", Key=old_s3_key)
     photos_repo.update(photo_id, {
-        "title": body.title,
-        "photo_url": body.photoUrl,
+        "title": title.strip(),
+        "photo_url": f"/photos/images/{photo_id}.{ext}",
+        "s3_key": s3_key,
         "updated_at": _now_iso_precise(),
     })
     return {"success": True, "message": "Photo updated."}
@@ -1038,9 +1053,28 @@ def update_photo(
 
 @app.delete("/photos/{photo_id}")
 def delete_photo(photo_id: str, _payload: dict = Depends(_require_officer)):
-    if not photos_repo.delete(photo_id):
+    existing = photos_repo.get_by_id(photo_id)
+    if existing is None:
         raise HTTPException(status_code=404, detail="Photo not found.")
+    photos_repo.delete(photo_id)
+    s3_key = existing.get("s3_key")
+    if s3_key:
+        s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        s3.delete_object(Bucket="koc830-assets", Key=s3_key)
     return {"success": True, "message": "Photo deleted."}
+
+
+@app.get("/photos/images/{filename}")
+def get_photo_image(filename: str):
+    s3_key = f"photos/{filename}"
+    import boto3
+    s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+    try:
+        obj = s3.get_object(Bucket="koc830-assets", Key=s3_key)
+    except s3.exceptions.NoSuchKey:
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    content_type = obj.get("ContentType", "image/jpeg")
+    return Response(content=obj["Body"].read(), media_type=content_type)
 
 
 @app.get("/officers")

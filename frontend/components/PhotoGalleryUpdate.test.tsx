@@ -88,13 +88,12 @@ describe("PhotoGalleryUpdate", () => {
     await waitFor(() => screen.getByText("Spring Charity Dinner 2026"));
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Charity Drive" } });
-    fireEvent.change(screen.getByLabelText("Upload Photo"), { target: { value: "/gallery/cd.jpg" } });
+    const file = new File(["fake"], "photo.jpg", { type: "image/jpeg" });
+    const fileInput = screen.getByLabelText("Upload Photo") as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [file] } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => {
-      expect(api.createPhoto).toHaveBeenCalledWith("abc", {
-        title: "Charity Drive",
-        photoUrl: "/gallery/cd.jpg",
-      });
+      expect(api.createPhoto).toHaveBeenCalledWith("abc", "Charity Drive", file);
       expect(screen.getByRole("heading", { name: "Success" })).toBeInTheDocument();
       expect(screen.getByText("Photo added.")).toBeInTheDocument();
     });
@@ -110,7 +109,8 @@ describe("PhotoGalleryUpdate", () => {
     await waitFor(() => screen.getByText("Spring Charity Dinner 2026"));
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Drafted Title" } });
-    fireEvent.change(screen.getByLabelText("Upload Photo"), { target: { value: "/gallery/drafted.jpg" } });
+    const file = new File(["fake"], "photo.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByLabelText("Upload Photo") as HTMLInputElement, { target: { files: [file] } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Error" })).toBeInTheDocument();
@@ -119,7 +119,6 @@ describe("PhotoGalleryUpdate", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.getByRole("heading", { name: "Add Photo" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Drafted Title")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("/gallery/drafted.jpg")).toBeInTheDocument();
   });
 
   it("Edit pre-fills the form and saves via API", async () => {
@@ -135,13 +134,11 @@ describe("PhotoGalleryUpdate", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByDisplayValue("Spring Charity Dinner 2026")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Renamed Dinner" } });
+    const file = new File(["fake"], "photo.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByLabelText("Upload Photo") as HTMLInputElement, { target: { files: [file] } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => {
-      expect(api.updatePhoto).toHaveBeenCalledWith(
-        "abc",
-        "p1",
-        expect.objectContaining({ title: "Renamed Dinner" }),
-      );
+      expect(api.updatePhoto).toHaveBeenCalledWith("abc", "p1", "Renamed Dinner", file);
       expect(screen.getByText("Photo updated.")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
@@ -193,15 +190,14 @@ describe("PhotoGalleryUpdate", () => {
       screen.getByRole("button", { name: "Select photo Spring Charity Dinner 2026" }),
     ).toHaveAttribute("aria-pressed", "true");
 
-    // Trigger a refresh via Add (mutation type doesn't matter — the refetch is what we want)
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "X" } });
-    fireEvent.change(screen.getByLabelText("Upload Photo"), { target: { value: "/gallery/x.jpg" } });
+    const file = new File(["fake"], "x.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByLabelText("Upload Photo") as HTMLInputElement, { target: { files: [file] } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => screen.getByRole("button", { name: "Dismiss" }));
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
 
-    // After the refetch, the deleted row is gone AND the selection should have been cleared
     await waitFor(() => expect(screen.queryByText("Spring Charity Dinner 2026")).toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByText("Please select a photo first.")).toBeInTheDocument();

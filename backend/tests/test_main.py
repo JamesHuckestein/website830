@@ -991,13 +991,14 @@ def test_update_announcement_preserves_created_by_and_created_at(monkeypatch):
 # Photos (gallery)
 # ---------------------------------------------------------------------------
 
-def _photo_payload(**overrides) -> dict:
-    base = {
-        "title": "Test Photo",
-        "photoUrl": "/gallery/test-photo.jpg",
-    }
-    base.update(overrides)
-    return base
+_VALID_JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 100
+_VALID_PNG_IMG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+
+
+def _photo_files(title="Test Photo", content=None, filename="test.jpg", content_type="image/jpeg"):
+    if content is None:
+        content = _VALID_JPEG
+    return {"title": (None, title), "file": (filename, content, content_type)}
 
 
 def test_get_photos_no_auth_required():
@@ -1021,7 +1022,7 @@ def test_get_photos_sorted_oldest_first():
 
 
 def test_create_photo_officer_succeeds():
-    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload())
+    r = client.post("/photos", headers=_officer_auth(), files=_photo_files())
     assert r.status_code == 200
     body = r.json()
     assert body["success"] is True
@@ -1032,37 +1033,27 @@ def test_create_photo_officer_succeeds():
 
 
 def test_create_photo_non_officer_forbidden():
-    r = client.post("/photos", headers=_non_officer_auth(), json=_photo_payload())
+    r = client.post("/photos", headers=_non_officer_auth(), files=_photo_files())
     assert r.status_code == 403
 
 
 def test_create_photo_requires_auth():
-    r = client.post("/photos", json=_photo_payload())
+    r = client.post("/photos", files=_photo_files())
     assert r.status_code in (401, 403)
 
 
 def test_create_photo_rejects_empty_title():
-    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(title=""))
-    assert r.status_code == 422
-
-
-def test_create_photo_rejects_whitespace_only_title():
-    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(title="   "))
+    r = client.post("/photos", headers=_officer_auth(), files=_photo_files(title=""))
     assert r.status_code == 422
 
 
 def test_create_photo_rejects_title_too_long():
-    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(title="x" * 201))
+    r = client.post("/photos", headers=_officer_auth(), files=_photo_files(title="x" * 201))
     assert r.status_code == 422
 
 
-def test_create_photo_rejects_empty_photo_url():
-    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(photoUrl=""))
-    assert r.status_code == 422
-
-
-def test_create_photo_rejects_photo_url_too_long():
-    r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(photoUrl="x" * 2049))
+def test_create_photo_rejects_invalid_image():
+    r = client.post("/photos", headers=_officer_auth(), files=_photo_files(content=b"not an image", filename="bad.txt", content_type="text/plain"))
     assert r.status_code == 422
 
 
@@ -1071,30 +1062,24 @@ def test_update_photo_officer_succeeds():
     r = client.put(
         f"/photos/{target_id}",
         headers=_officer_auth(),
-        json=_photo_payload(title="Renamed", photoUrl="/gallery/renamed.png"),
+        files=_photo_files(title="Renamed"),
     )
     assert r.status_code == 200
     listing = client.get("/photos").json()
     updated = next(p for p in listing if p["id"] == target_id)
     assert updated["title"] == "Renamed"
-    assert updated["photoUrl"] == "/gallery/renamed.png"
+    assert "/photos/images/" in updated["photoUrl"]
 
 
 def test_update_photo_non_officer_forbidden():
     target_id = "e5f6a7b8-0001-0000-0000-000000000001"
-    r = client.put(f"/photos/{target_id}", headers=_non_officer_auth(), json=_photo_payload())
+    r = client.put(f"/photos/{target_id}", headers=_non_officer_auth(), files=_photo_files())
     assert r.status_code == 403
 
 
 def test_update_photo_not_found():
-    r = client.put("/photos/no-such-id", headers=_officer_auth(), json=_photo_payload())
+    r = client.put("/photos/no-such-id", headers=_officer_auth(), files=_photo_files())
     assert r.status_code == 404
-
-
-def test_update_photo_rejects_invalid_body():
-    target_id = "e5f6a7b8-0001-0000-0000-000000000001"
-    r = client.put(f"/photos/{target_id}", headers=_officer_auth(), json={"title": "only-title"})
-    assert r.status_code == 422
 
 
 def test_delete_photo_officer_succeeds():
@@ -1134,11 +1119,7 @@ def test_photo_full_lifecycle(monkeypatch):
     assert len(client.get("/photos").json()) == 2
 
     # Create
-    r = client.post(
-        "/photos",
-        headers=_officer_auth(),
-        json=_photo_payload(title="LC1", photoUrl="/gallery/lc1.jpg"),
-    )
+    r = client.post("/photos", headers=_officer_auth(), files=_photo_files(title="LC1"))
     assert r.status_code == 200
     new_id = r.json()["id"]
 
@@ -1147,23 +1128,18 @@ def test_photo_full_lifecycle(monkeypatch):
     assert len(listing) == 3
     assert listing[-1]["id"] == new_id
     assert listing[-1]["title"] == "LC1"
-    assert listing[-1]["photoUrl"] == "/gallery/lc1.jpg"
+    assert "/photos/images/" in listing[-1]["photoUrl"]
     assert listing[-1]["createdBy"] == "4897307"
     assert listing[-1]["createdAt"] == listing[-1]["updatedAt"]
 
     # Update
-    r2 = client.put(
-        f"/photos/{new_id}",
-        headers=_officer_auth(),
-        json=_photo_payload(title="LC2", photoUrl="/gallery/lc2.jpg"),
-    )
+    r2 = client.put(f"/photos/{new_id}", headers=_officer_auth(), files=_photo_files(title="LC2"))
     assert r2.status_code == 200
 
     # GET sees the update
     listing2 = client.get("/photos").json()
     updated = next(p for p in listing2 if p["id"] == new_id)
     assert updated["title"] == "LC2"
-    assert updated["photoUrl"] == "/gallery/lc2.jpg"
 
     # Delete
     r3 = client.delete(f"/photos/{new_id}", headers=_officer_auth())
@@ -1179,11 +1155,7 @@ def test_create_photo_populates_audit_fields_from_jwt_and_now(monkeypatch):
     from app import main as _main
 
     monkeypatch.setattr(_main, "_now_iso_precise", lambda: "2026-05-01T09:30:00Z")
-    r = client.post(
-        "/photos",
-        headers=_officer_auth(),
-        json=_photo_payload(title="Audit"),
-    )
+    r = client.post("/photos", headers=_officer_auth(), files=_photo_files(title="Audit"))
     assert r.status_code == 200
     new_id = r.json()["id"]
     record = next(p for p in client.get("/photos").json() if p["id"] == new_id)
@@ -1196,35 +1168,25 @@ def test_update_photo_preserves_created_by_and_created_at(monkeypatch):
     from app import main as _main
 
     monkeypatch.setattr(_main, "_now_iso_precise", lambda: "2026-05-01T09:30:00Z")
-    new_id = client.post(
-        "/photos",
-        headers=_officer_auth(),
-        json=_photo_payload(title="A"),
-    ).json()["id"]
+    new_id = client.post("/photos", headers=_officer_auth(), files=_photo_files(title="A")).json()["id"]
 
     monkeypatch.setattr(_main, "_now_iso_precise", lambda: "2026-05-15T14:45:00Z")
-    # PUT as a different officer to ensure created_by isn't overwritten by the JWT sub
     r = client.put(
         f"/photos/{new_id}",
-        headers=_auth("3418397", "koc830"),  # Deputy Grand Knight, also an officer
-        json=_photo_payload(title="B"),
+        headers=_auth("3418397", "koc830"),
+        files=_photo_files(title="B"),
     )
     assert r.status_code == 200
 
     after = next(p for p in client.get("/photos").json() if p["id"] == new_id)
-    assert after["createdBy"] == "4897307"  # original creator preserved
-    assert after["createdAt"] == "2026-05-01T09:30:00Z"  # original timestamp preserved
-    assert after["updatedAt"] == "2026-05-15T14:45:00Z"  # bumped to current time
+    assert after["createdBy"] == "4897307"
+    assert after["createdAt"] == "2026-05-01T09:30:00Z"
+    assert after["updatedAt"] == "2026-05-15T14:45:00Z"
 
 
 def test_get_photos_same_day_sorted_by_insertion_order(monkeypatch):
-    """Photos created in the same day must appear oldest-first by insertion
-    order, not by random UUID tiebreaker. Regression test for the date-only
-    `_now_iso()` bug where every same-day record shared `T00:00:00Z` and the
-    sort fell back to a random `id`."""
     from app import main as _main
 
-    # Three creates on the same day, each at a distinct second.
     timestamps = iter([
         "2026-06-01T08:00:00Z",
         "2026-06-01T08:00:01Z",
@@ -1233,7 +1195,7 @@ def test_get_photos_same_day_sorted_by_insertion_order(monkeypatch):
     monkeypatch.setattr(_main, "_now_iso_precise", lambda: next(timestamps))
 
     for title in ("Alpha", "Bravo", "Charlie"):
-        r = client.post("/photos", headers=_officer_auth(), json=_photo_payload(title=title))
+        r = client.post("/photos", headers=_officer_auth(), files=_photo_files(title=title))
         assert r.status_code == 200
 
     listing = client.get("/photos").json()
@@ -1241,17 +1203,24 @@ def test_get_photos_same_day_sorted_by_insertion_order(monkeypatch):
     assert new_titles == ["Alpha", "Bravo", "Charlie"]
 
 
-def test_create_photo_trims_title_and_photo_url():
-    r = client.post(
-        "/photos",
-        headers=_officer_auth(),
-        json=_photo_payload(title="  Padded  ", photoUrl="  /gallery/padded.jpg  "),
-    )
+def test_create_photo_trims_title():
+    r = client.post("/photos", headers=_officer_auth(), files=_photo_files(title="  Padded  "))
     assert r.status_code == 200
     new_id = r.json()["id"]
     record = next(p for p in client.get("/photos").json() if p["id"] == new_id)
     assert record["title"] == "Padded"
-    assert record["photoUrl"] == "/gallery/padded.jpg"
+
+
+def test_get_photo_image_serves_uploaded_file():
+    r = client.post("/photos", headers=_officer_auth(), files=_photo_files(title="Serve Test", content=_VALID_JPEG))
+    new_id = r.json()["id"]
+    listing = client.get("/photos").json()
+    photo = next(p for p in listing if p["id"] == new_id)
+    img_path = photo["photoUrl"].split("testserver")[-1] if "testserver" in photo["photoUrl"] else photo["photoUrl"]
+    img_r = client.get(img_path)
+    assert img_r.status_code == 200
+    assert img_r.headers["content-type"] == "image/jpeg"
+    assert img_r.content == _VALID_JPEG
 
 
 # ---------------------------------------------------------------------------

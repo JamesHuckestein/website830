@@ -6,7 +6,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PhotoCard } from "@/components/PhotoCard";
 import {
   PhotoFormModal,
-  type PhotoFormValues,
+  type PhotoFormResult,
 } from "@/components/PhotoFormModal";
 import { SubmitModal } from "@/components/SubmitModal";
 import {
@@ -75,17 +75,16 @@ export function PhotoGalleryUpdate({ token, onBack }: PhotoGalleryUpdateProps) {
     setConfirmDelete(selected);
   };
 
-  const handleFormSave = async (values: PhotoFormValues) => {
+  const handleFormSave = async (values: PhotoFormResult) => {
     if (!formOpen || submitting) return;
-    const body = { title: values.title, photoUrl: values.photoUrl };
     const isAdd = formOpen.mode === "add";
     const editTarget = formOpen.target;
     setSubmitting(true);
     try {
       const result = isAdd
-        ? await createPhoto(token, body)
+        ? await createPhoto(token, values.title, values.file)
         : editTarget
-          ? await updatePhoto(token, editTarget.id, body)
+          ? await updatePhoto(token, editTarget.id, values.title, values.file)
           : null;
       if (result) {
         setFeedback({ success: true, message: result.message });
@@ -102,7 +101,6 @@ export function PhotoGalleryUpdate({ token, onBack }: PhotoGalleryUpdateProps) {
               ? "Failed to add photo. Please try again."
               : "Failed to update photo. Please try again.",
       });
-      // Leave formOpen as-is so the user can correct and retry with values preserved.
     } finally {
       setSubmitting(false);
     }
@@ -137,11 +135,7 @@ export function PhotoGalleryUpdate({ token, onBack }: PhotoGalleryUpdateProps) {
       {formOpen && (
         <PhotoFormModal
           mode={formOpen.mode}
-          initialValues={
-            formOpen.target
-              ? { title: formOpen.target.title, photoUrl: formOpen.target.photoUrl }
-              : undefined
-          }
+          initialTitle={formOpen.target?.title}
           submitting={submitting}
           onSave={handleFormSave}
           onCancel={() => setFormOpen(null)}

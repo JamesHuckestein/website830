@@ -1,35 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
-export type PhotoFormValues = {
+export type PhotoFormResult = {
   title: string;
-  photoUrl: string;
+  file: File;
 };
 
 type PhotoFormModalProps = {
   mode: "add" | "edit";
-  initialValues?: PhotoFormValues;
+  initialTitle?: string;
   submitting?: boolean;
-  onSave: (values: PhotoFormValues) => void;
+  onSave: (values: PhotoFormResult) => void;
   onCancel: () => void;
 };
 
-const EMPTY: PhotoFormValues = { title: "", photoUrl: "" };
-
 export function PhotoFormModal({
   mode,
-  initialValues,
+  initialTitle,
   submitting = false,
   onSave,
   onCancel,
 }: PhotoFormModalProps) {
-  const [values, setValues] = useState<PhotoFormValues>(initialValues ?? EMPTY);
+  const [title, setTitle] = useState(initialTitle ?? "");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [showErrors, setShowErrors] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const titleValid = values.title.trim().length > 0;
-  const photoUrlValid = values.photoUrl.trim().length > 0;
-  const isValid = titleValid && photoUrlValid;
+  const titleValid = title.trim().length > 0;
+  const fileValid = photoFile !== null;
+  const isValid = titleValid && fileValid;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setPhotoFile(file);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,10 +42,7 @@ export function PhotoFormModal({
       setShowErrors(true);
       return;
     }
-    onSave({
-      title: values.title.trim(),
-      photoUrl: values.photoUrl.trim(),
-    });
+    onSave({ title: title.trim(), file: photoFile! });
   };
 
   return (
@@ -57,8 +59,8 @@ export function PhotoFormModal({
           Title
           <input
             type="text"
-            value={values.title}
-            onChange={(e) => setValues({ ...values, title: e.target.value })}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
             maxLength={200}
             className="mt-1 w-full rounded-md border border-[#D3D3D3] px-3 py-2 text-sm"
           />
@@ -68,21 +70,25 @@ export function PhotoFormModal({
         </label>
 
         <div>
-          <label className="block text-sm font-medium text-[#032147]">
+          <label htmlFor="photo-file-upload" className="block text-sm font-medium text-[#032147]">
             Upload Photo
-            <input
-              type="text"
-              value={values.photoUrl}
-              onChange={(e) => setValues({ ...values, photoUrl: e.target.value })}
-              maxLength={2048}
-              className="mt-1 w-full rounded-md border border-[#D3D3D3] px-3 py-2 text-sm"
-            />
           </label>
+          <input
+            id="photo-file-upload"
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            onChange={handleFileChange}
+            className="mt-1 w-full text-sm text-[#032147] file:mr-3 file:rounded-md file:border-0 file:bg-[#4169E1] file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white"
+          />
           <span className="mt-1 block text-xs text-[#888888]">
             Supported formats: JPEG, PNG, WebP, GIF.
           </span>
-          {showErrors && !photoUrlValid && (
-            <span className="mt-1 block text-xs text-red-700">Upload Photo is required.</span>
+          {showErrors && !fileValid && (
+            <span className="mt-1 block text-xs text-red-700">A photo file is required.</span>
+          )}
+          {photoFile && (
+            <p className="mt-1 text-xs text-[#888888]">Selected: {photoFile.name}</p>
           )}
         </div>
 

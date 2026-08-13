@@ -101,6 +101,7 @@ def dynamo_tables():
     with mock_aws():
         _reset_resource()
         _create_tables()
+        boto3.client("s3", region_name="us-east-1").create_bucket(Bucket="koc830-assets")
         _seed_tables()
         yield
         _reset_resource()
