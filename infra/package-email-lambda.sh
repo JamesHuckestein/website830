@@ -14,7 +14,7 @@ ZIP_PATH="$ROOT/infra/email-lambda.zip"
 
 echo "Packaging email Lambda..."
 cd "$ROOT/backend/lambda"
-zip -q "$ZIP_PATH" email_handler.py
+zip -q "$ZIP_PATH" email_handler.py KoCLogo.png
 
 ZIP_SIZE=$(du -h "$ZIP_PATH" | cut -f1)
 echo "  Zip created: $ZIP_PATH ($ZIP_SIZE)"

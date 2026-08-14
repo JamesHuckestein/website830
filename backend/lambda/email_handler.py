@@ -4,15 +4,23 @@ Lambda function: receives a JSON payload {to, subject, body} and sends via SES.
 Environment variables (set in the Lambda console):
   FROM_ADDRESS  — verified SES sender address (e.g. noreply@koc830.org)
 """
+import html
 import json
 import os
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from pathlib import Path
+from string import Template
 
 import boto3
 
 _ses = boto3.client("ses", region_name="us-east-1")
 _FROM = os.environ["FROM_ADDRESS"]
 
-_LOGO_URL = "https://d2l5mpo9n81d3v.cloudfront.net/assets/KoCLogo.png"
+_LOGO_CID = "koc-logo"
+_LOGO_PATH = Path(__file__).parent / "KoCLogo.png"
+_LOGO_BYTES = _LOGO_PATH.read_bytes()
 
 _HTML_TEMPLATE = """<!doctype html>
 <html lang='en'>
@@ -21,20 +29,20 @@ _HTML_TEMPLATE = """<!doctype html>
 <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,shrink-to-fit=yes'>
 <title>K of C Council # 830 E-mail</title>
 <style type='text/css'>
-body {{
+body {
 font-family: Arial, Helvetica, sans-serif;
 font-weight: normal;
 color: #003466;
 font-size: 14px;
 margin-bottom: 14px;
-}}
-p {{
+}
+p {
 font-family: Arial, Helvetica, sans-serif;
 font-weight: normal;
 color: #003466;
 font-size: 14px;
 margin-bottom: 14px;
-}}
+}
 </style>
 </head>
 <body>
@@ -42,7 +50,7 @@ margin-bottom: 14px;
 <tr>
 <td height='100' bgcolor='#003566'><table width='600' border='0' cellspacing='0' cellpadding='0'>
 <tr>
-<td width='355' height='100' align='center'><img src='{logo_url}' width='200' height='72' /></td>
+<td width='355' height='100' align='center'><img src='cid:$logo_cid' width='200' height='72' /></td>
 <td width='245' height='100' align='center'>
 <strong><font face='Arial' size='2' color='#FFFFFF'>Council #830<br>Denison</font></strong></td>
 </tr>
@@ -63,7 +71,7 @@ margin-bottom: 14px;
 <td>&nbsp;</td>
 </tr>
 <tr>
-<td align='left'><font face='Arial' color='#003566' style='font-size:14px'>{message_html}
+<td align='left'><font face='Arial' color='#003566' style='font-size:14px'>$message_html
 <p>&nbsp;</p>
 <p>Vivat Jesus!</p>
 <p>&nbsp;</p></font></td>
@@ -97,15 +105,38 @@ margin-bottom: 14px;
 
 
 def _text_to_html_paragraphs(text: str) -> str:
-    """Convert plain text to HTML paragraphs."""
+    """Convert plain text to HTML paragraphs with proper escaping."""
     paragraphs = text.strip().split("\n")
-    return "".join(f"<p>{p if p.strip() else '&nbsp;'}</p>" for p in paragraphs)
+    return "".join(f"<p>{html.escape(p) if p.strip() else '&nbsp;'}</p>" for p in paragraphs)
 
 
 def _build_html(text: str) -> str:
     """Wrap plain text message in the HTML email template."""
     message_html = _text_to_html_paragraphs(text)
-    return _HTML_TEMPLATE.format(logo_url=_LOGO_URL, message_html=message_html)
+    return Template(_HTML_TEMPLATE).safe_substitute(logo_cid=_LOGO_CID, message_html=message_html)
+
+
+def _build_mime_message(sender: str, recipients: list[str], subject: str, text: str, html_body: str) -> MIMEMultipart:
+    """Build a MIME message with inline logo attachment."""
+    msg = MIMEMultipart("mixed")
+    msg["From"] = sender
+    msg["To"] = sender
+    msg["Bcc"] = ", ".join(recipients)
+    msg["Subject"] = subject
+
+    related = MIMEMultipart("related")
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(text, "plain", "utf-8"))
+    alt.attach(MIMEText(html_body, "html", "utf-8"))
+    related.attach(alt)
+
+    logo = MIMEImage(_LOGO_BYTES, _subtype="png")
+    logo.add_header("Content-ID", f"<{_LOGO_CID}>")
+    logo.add_header("Content-Disposition", "inline", filename="KoCLogo.png")
+    related.attach(logo)
+
+    msg.attach(related)
+    return msg
 
 
 def lambda_handler(event, context):
@@ -122,21 +153,16 @@ def lambda_handler(event, context):
         return {"statusCode": 400, "body": json.dumps({"error": "to is required"})}
 
     recipients = [to] if isinstance(to, str) else list(to)
-    html = _build_html(text)
+    html_body = _build_html(text)
 
     batch_size = 30
     for i in range(0, len(recipients), batch_size):
         batch = recipients[i:i + batch_size]
-        _ses.send_email(
+        mime_msg = _build_mime_message(_FROM, batch, subject, text, html_body)
+        _ses.send_raw_email(
             Source=_FROM,
-            Destination={"ToAddresses": [_FROM], "BccAddresses": batch},
-            Message={
-                "Subject": {"Data": subject},
-                "Body": {
-                    "Text": {"Data": text},
-                    "Html": {"Data": html},
-                },
-            },
+            Destinations=batch,
+            RawMessage={"Data": mime_msg.as_string()},
         )
 
     return {
